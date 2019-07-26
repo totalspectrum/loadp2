@@ -1,6 +1,7 @@
 /*
  *
  * Copyright (c) 2017-2019 by Dave Hein
+ * Copyright (c) 2019 Total Spectrum Software Inc.
  * Based on p2load written by David Betz
  *
  * MIT License
@@ -87,7 +88,7 @@ promptexit(int r)
 static void Usage(void)
 {
 printf("\
-loadp2 - a loader for the propeller 2 - version 0.013 + ELF, 2019-07-21\n\
+loadp2 - a loader for the propeller 2 - version 0.014 2019-07-26\n\
 usage: loadp2\n\
          [ -p port ]               serial port\n\
          [ -b baud ]               user baud rate (default is %d)\n\
