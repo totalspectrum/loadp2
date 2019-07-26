@@ -2,11 +2,11 @@
                               December 29, 2018
                                   Dave Hein
 
-Loadp2 will load and execute a P2 binary file.  It can be built under Cygwin,
-MinGW or Linux by running the correpsonding build_xxxxx script file.  After
-loading, loadp2 will go into a terminal emulator mode if the -t option was
-specified.  The -T option may be used to run the terminal emulator in the PST
-mode.
+Loadp2 will load and execute a P2 binary or ELF file.  It can be built
+under Cygwin, MinGW or Linux by running the correpsonding build_xxxxx
+script file.  After loading, loadp2 will go into a terminal emulator
+mode if the -t option was specified.  The -T option may be used to run
+the terminal emulator in the PST mode.
 
 An example of running loadp2 under Cygwin without the terminal emulator is as
 follows.
@@ -24,18 +24,21 @@ serial ports.  This is done as follows:
 
 If no parameter are specified loadp2 will print out the following usage message.
 
-loadp2 - a loader for the propeller 2 - version 0.007, 2018-12-29
+loadp2 - a loader for the propeller 2 - version 0.014, 2019-07-26
 usage: loadp2
          [ -p port ]               serial port
-         [ -b baud ]               baud rate (default is -1)
+         [ -b baud ]               use baud rate (default is 115200)
+	 [ -l baud ]               loader baud rate (default is 2000000)
          [ -f clkfreq ]            clock frequency (default is 80000000)
          [ -m clkmode ]            clock mode in hex (default is ffffffff)
          [ -s address ]            starting address in hex (default is 0)
          [ -t ]                    enter terminal mode after running the program
          [ -T ]                    enter PST-compatible terminal mode
          [ -v ]                    enable verbose mode
+	 [ -k ]                    wait for user input before exit
          [ -? ]                    display a usage message and exit
          [ -CHIP ]                 set load mode for CHIP
          [ -FPGA ]                 set load mode for FPGA
          [ -SINGLE ]               set load mode for single stage
+	 [ -PATCH ]                patch in clock frequency and serial params
          file                      file to load
