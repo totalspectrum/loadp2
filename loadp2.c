@@ -229,7 +229,7 @@ loadBinaryFile(char *fname)
         /* this is an ELF file, load using LoadElf instead */
         return loadElfFile(infile, &hdr);
     } else {
-        printf("not an ELF file\n");
+        //printf("not an ELF file\n");
     }
     
     fseek(infile, 0, SEEK_END);
