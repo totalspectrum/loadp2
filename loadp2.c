@@ -36,7 +36,11 @@
 #define LOAD_FPGA   1
 #define LOAD_SINGLE 2
 
+#if defined(__APPLE__)
+static int loader_baud = 921600;
+#else
 static int loader_baud = 2000000;
+#endif
 static int clock_mode = -1;
 static int user_baud = 115200;
 static int clock_freq = 80000000;
@@ -88,7 +92,7 @@ promptexit(int r)
 static void Usage(void)
 {
 printf("\
-loadp2 - a loader for the propeller 2 - version 0.014 2019-07-26\n\
+loadp2 - a loader for the propeller 2 - version 0.015 2019-08-14\n\
 usage: loadp2\n\
          [ -p port ]               serial port\n\
          [ -b baud ]               user baud rate (default is %d)\n\

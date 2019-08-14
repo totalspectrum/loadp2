@@ -38,5 +38,8 @@ default: $(BUILD)/loadp2$(EXT)
 $(BUILD)/loadp2$(EXT): $(BUILD) loadp2.c loadelf.c loadelf.h osint_linux.c osint_mingw.c
 	$(CC) -Wall -O -o $@ loadp2.c loadelf.c $(OSFILE)
 
+clean:
+	rm -rf $(BUILD)
+
 $(BUILD):
 	mkdir -p $(BUILD)

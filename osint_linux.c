@@ -230,8 +230,11 @@ last_baud = baud;
             tbaud = B9600;
             break;
         default:
-            printf("Unsupported baudrate %lu. Use ", baud);
+#ifdef MACOSX
+            // just try setting baud directly
             tbaud = baud;
+#else            
+            printf("Unsupported baudrate %lu. Use ", baud);
 #ifdef B921600
             printf("921600, ");
 #endif
@@ -250,6 +253,7 @@ last_baud = baud;
             printf("115200, 57600, 38400, 19200, or 9600\n");
             serial_done();
             exit(2);
+#endif            
             break;
     }
     
