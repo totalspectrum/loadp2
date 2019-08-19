@@ -145,7 +145,7 @@ int serial_init(const char* port, unsigned long baud)
     sparm = old_sparm;
     
     /* set raw input */
-#ifdef MACOSX
+#if 1 || defined(MACOSX)
     cfmakeraw(&sparm);
     sparm.c_cc[VTIME] = 0;
     sparm.c_cc[VMIN] = 1;
