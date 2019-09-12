@@ -62,12 +62,6 @@ int get_loader_baud(int ubaud, int lbaud);
 #include "MainLoader.h"
 #include "MainLoader1.h"
 
-char *MainLoader =
-" 00 1e 60 fd 13 00 88 fc 20 7e 65 fd 24 08 60 fd 24 28 60 fd 1f 20 60 fd 08 06 dc fc 40 7e 74 fd 01 28 84 f0 1f 22 60 fd 18 28 44 f0 15 28 60 fd f6 25 6c fb 00 00 7c fc 13 00 e8 fc";
-
-char *MainLoader1 =
-" 00 26 60 fd 86 01 80 ff 1f 80 66 fd 03 26 44 f5 00 26 60 fd 17 00 88 fc 20 7e 65 fd 24 08 60 fd 24 28 60 fd 1f 28 60 fd 08 06 dc fc 40 7e 74 fd 01 30 84 f0 1f 2a 60 fd 18 30 44 f0 15 30 60 fd f6 2d 6c fb 00 00 7c fc 17 00 e8 fc";
-
 static int32_t ibuf[256];
 static int32_t ibin[32];
 static char *buffer = (char *)ibuf;
@@ -364,7 +358,6 @@ int loadfile(char *fname, int address)
         printf("Could not open %s\n", fname);
         return 1;
     }
-    if (verbose) printf("Loading %s - %d bytes\n", fname, size);
     hwreset();
     msleep(50);
     tx((uint8_t *)"> Prop_Hex 0 0 0 0", 18);
@@ -379,6 +372,7 @@ int loadfile(char *fname, int address)
     txval(address);
     tx((uint8_t *)"~", 1);
     msleep(100);
+    if (verbose) printf("Loading %s - %d bytes\n", fname, size);
     while ((num=loadBytes(buffer, 1024)))
     {
         if (patch)

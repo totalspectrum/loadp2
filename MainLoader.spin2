@@ -25,7 +25,7 @@ loopend
 
 		coginit	#0,address		'launch cog 0 from address
 
-		orgf	$100
+		orgf	$80
 clkmode_	res	1			'clock mode
 waitbit1_5	res	1			'1.5 bit cycles = 3*clock_freq/baud_rate/2 - 6
 waitbit		res	1			'1 bit cycles = clock_freq/baud_rate - 6
