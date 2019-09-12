@@ -59,6 +59,9 @@ int get_loader_baud(int ubaud, int lbaud);
   #define PORT_PREFIX "/dev/ttyUSB"
 #endif
 
+#include "MainLoader.h"
+#include "MainLoader1.h"
+
 char *MainLoader =
 " 00 1e 60 fd 13 00 88 fc 20 7e 65 fd 24 08 60 fd 24 28 60 fd 1f 20 60 fd 08 06 dc fc 40 7e 74 fd 01 28 84 f0 1f 22 60 fd 18 28 44 f0 15 28 60 fd f6 25 6c fb 00 00 7c fc 13 00 e8 fc";
 
@@ -113,11 +116,24 @@ usage: loadp2\n\
     promptexit(1);
 }
 
+void txbyte(int val)
+{
+    sprintf(buffer, " %2.2x", val&255);
+    tx((uint8_t *)buffer, strlen(buffer));
+}
+
 void txval(int val)
 {
     sprintf(buffer, " %2.2x %2.2x %2.2x %2.2x",
         val&255, (val >> 8) & 255, (val >> 16) & 255, (val >> 24) & 255);
     tx((uint8_t *)buffer, strlen(buffer));
+}
+
+void txstring(unsigned char *bytes, int len)
+{
+    while (len-- > 0) {
+        txbyte(*bytes++);
+    }
 }
 
 int compute_checksum(int *ptr, int num)
@@ -353,9 +369,9 @@ int loadfile(char *fname, int address)
     msleep(50);
     tx((uint8_t *)"> Prop_Hex 0 0 0 0", 18);
     if (load_mode == LOAD_FPGA)
-        tx((uint8_t *)MainLoader, strlen(MainLoader));
+        txstring((uint8_t *)MainLoader_bin, MainLoader_bin_len);
     else
-        tx((uint8_t *)MainLoader1, strlen(MainLoader1));
+        txstring((uint8_t *)MainLoader1_bin, MainLoader1_bin_len);
     txval(clock_mode);
     txval((3*clock_freq+loader_baud)/(loader_baud*2)-extra_cycles);
     txval((clock_freq+loader_baud/2)/loader_baud-extra_cycles);

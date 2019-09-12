@@ -3,7 +3,7 @@ CON
 
 DAT		org
 
-begin		hubset	clkmode			'set the clock mode
+begin		hubset	clkmode_			'set the clock mode
 		wrfast	#0,address		'ready to write entire memory starting at address
 		setse1	#%010_000000 | rxpin	'select negative edge on p63
 
@@ -25,7 +25,8 @@ loopend
 
 		coginit	#0,address		'launch cog 0 from address
 
-clkmode		res	1			'clock mode
+		orgf	$100
+clkmode_	res	1			'clock mode
 waitbit1_5	res	1			'1.5 bit cycles = 3*clock_freq/baud_rate/2 - 6
 waitbit		res	1			'1 bit cycles = clock_freq/baud_rate - 6
 filesize	res	1			'binary file size in bytes

@@ -33,13 +33,24 @@ else
   OSFILE=osint_linux.c
 endif
 
+# program for converting MainLoader.spin2 to MainLoader.binary
+PASM=fastspin -2
+
 default: $(BUILD)/loadp2$(EXT)
 
-$(BUILD)/loadp2$(EXT): $(BUILD) loadp2.c loadelf.c loadelf.h osint_linux.c osint_mingw.c
+HEADERS=MainLoader.h MainLoader1.h
+
+$(BUILD)/loadp2$(EXT): $(BUILD) loadp2.c loadelf.c loadelf.h osint_linux.c osint_mingw.c $(HEADERS)
 	$(CC) -Wall -O -o $@ loadp2.c loadelf.c $(OSFILE)
 
 clean:
-	rm -rf $(BUILD)
+	rm -rf $(BUILD) *.o $(HEADERS) *.pasm *.bin
 
 $(BUILD):
 	mkdir -p $(BUILD)
+
+%.h: %.bin
+	xxd -i $< > $@
+
+%.bin: %.spin2
+	$(PASM) -o $@ $<
