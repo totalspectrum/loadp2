@@ -236,7 +236,7 @@ loadBinaryFile(char *fname)
     infile = fopen(fname, "rb");
     if (!infile)
     {
-        printf("Could not open %s\n", fname);
+        perror(fname);
         return -1;
     }
     if (ReadAndCheckElfHdr(infile, &hdr)) {
