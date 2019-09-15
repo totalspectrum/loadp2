@@ -359,7 +359,10 @@ int loadfile(char *fname, int address)
         return 1;
     }
     hwreset();
-    msleep(50);
+    if (verbose) {
+        printf("Loading fast loader for %s...\n", (load_mode == LOAD_FPGA) ? "fpga" : "chip");
+    }
+    msleep(100);
     tx((uint8_t *)"> Prop_Hex 0 0 0 0", 18);
     if (load_mode == LOAD_FPGA)
         txstring((uint8_t *)MainLoader_bin, MainLoader_bin_len);
@@ -371,7 +374,7 @@ int loadfile(char *fname, int address)
     txval(size);
     txval(address);
     tx((uint8_t *)"~", 1);
-    msleep(100);
+    msleep(200);
     if (verbose) printf("Loading %s - %d bytes\n", fname, size);
     while ((num=loadBytes(buffer, 1024)))
     {
@@ -415,20 +418,20 @@ int findp2(char *portprefix, int baudrate)
                 if (verbose) printf("P2 version %c found on serial port %s\n", buffer[11], Port);
                 if (load_mode == -1)
                 {
-                    if (buffer[11] == 'A')
-                    {
-                        load_mode = LOAD_CHIP;
-                        if (verbose) printf("Setting load mode to CHIP\n");
-                    }
-                    else if (buffer[11] == 'B')
+                    if (buffer[11] == 'B')
                     {
                         load_mode = LOAD_FPGA;
                         if (verbose) printf("Setting load mode to FPGA\n");
                     }
+                    else if (buffer[11] == 'A' || buffer[11] == 'G')
+                    {
+                        load_mode = LOAD_CHIP;
+                        if (verbose) printf("Setting load mode to CHIP\n");
+                    }
                     else
                     {
-                        printf("Unknown version %c\n", buffer[11]);
-                        exit(1);
+                        printf("Warning: Unknown version %c, assuming CHIP\n", buffer[11]);
+                        load_mode = LOAD_CHIP;
                     }
                 }
                 return 1;
