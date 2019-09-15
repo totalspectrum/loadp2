@@ -1,6 +1,6 @@
 CON
 		rxpin = 63
-
+		
 DAT		org
 
 begin		hubset	clkmode_			'set up oscillator 
@@ -9,7 +9,9 @@ begin		hubset	clkmode_			'set up oscillator
                 hubset  clkmode_                 'enable oscillator
 		wrfast	#0,address		'ready to write entire memory starting at address
 		setse1	#%010_000000 | rxpin	'select negative edge on p63
-
+		drvl	#57
+		drvl	#56
+		
 mainloop	pollse1				'clear edge detector
 		waitse1				'wait for start bit
 		waitx	waitbit1_5		'wait for middle of 1st data bit
@@ -26,6 +28,12 @@ loopend
 
                 rdfast  #0,#0                   'wait for last byte to be written
 
+		'' short pause for host to change baud
+		drvl	#56
+		waitx	##160_000_000
+		drvh	#56
+		waitx	##160_000_000
+		
 		' switch back to rcfast mode, maybe
 		rdlong	 rxbyte, #$18 wz	' fetch program's clock mode
 	if_nz	coginit	 #0, address
