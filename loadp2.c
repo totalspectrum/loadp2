@@ -68,6 +68,7 @@ static char *buffer = (char *)ibuf;
 static char *binbuffer = (char *)ibin;
 static int verbose = 0;
 static int waitAtExit = 0;
+static int force_zero = 0;
 
 /* promptexit: print a prompt if waitAtExit is set, then exit */
 void
@@ -89,7 +90,7 @@ promptexit(int r)
 static void Usage(void)
 {
 printf("\
-loadp2 - a loader for the propeller 2 - version 0.016 2019-09-12\n\
+loadp2 - a loader for the propeller 2 - version 0.017 2019-09-16\n\
 usage: loadp2\n\
          [ -p port ]               serial port\n\
          [ -b baud ]               user baud rate (default is %d)\n\
@@ -106,6 +107,7 @@ usage: loadp2\n\
          [ -FPGA ]                 set load mode for FPGA\n\
          [ -SINGLE ]               set load mode for single stage\n\
          [ -PATCH ]                patch in clock frequency and serial parms\n\
+         [ -ZERO ]                 force memory to be zeroed before download\n\
          file                      file to load\n", user_baud, loader_baud, clock_freq, clock_mode);
     promptexit(1);
 }
@@ -373,6 +375,7 @@ int loadfile(char *fname, int address)
     txval((clock_freq+loader_baud/2)/loader_baud-extra_cycles);
     txval(size);
     txval(address);
+    txval(force_zero);
     tx((uint8_t *)"~", 1);
     msleep(200);
     if (verbose) printf("Loading %s - %d bytes\n", fname, size);
@@ -406,13 +409,17 @@ int findp2(char *portprefix, int baudrate)
         sprintf(Port, "%s%d", portprefix, i);
         if (serial_init(Port, baudrate))
         {
+            if (verbose) printf("trying %s...\n", Port);
             hwreset();
-            msleep(50);
+            msleep(100);
             tx((uint8_t *)"> Prop_Chk 0 0 0 0  ", 20);
             msleep(50);
             num = rx_timeout((uint8_t *)buffer, 100, 10);
             if (num >= 0) buffer[num] = 0;
-            else buffer[0] = 0;
+            else {
+                buffer[0] = 0;
+                if (verbose) printf("  timeout\n");
+            }
             if (!strncmp(buffer, "\r\nProp_Ver ", 11))
             {
                 if (verbose) printf("P2 version %c found on serial port %s\n", buffer[11], Port);
@@ -575,6 +582,8 @@ int main(int argc, char **argv)
                 load_mode = LOAD_FPGA;
             else if (!strcmp(argv[i], "-SINGLE"))
                 load_mode = LOAD_SINGLE;
+            else if (!strcmp(argv[i], "-ZERO"))
+                force_zero = 1;
             else
             {
                 printf("Invalid option %s\n", argv[i]);

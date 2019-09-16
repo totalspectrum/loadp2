@@ -7,6 +7,19 @@ begin		hubset	clkmode_			'set up oscillator
                 waitx   ##20_000_000/100        'wait 10 ms
                 or      clkmode_, #3             'enable XI+PLL mode
                 hubset  clkmode_                 'enable oscillator
+		tjz	forcezero, #skipzero
+		'' zero out memory
+		wrfast	#0,0
+		mov	pb, ##$7c0000/16
+		mov	forcezero, #0
+zeroloop
+		wflong	forcezero
+		wflong	forcezero
+		wflong	forcezero
+		wflong	forcezero
+		djnz	pb, #zeroloop
+		rdfast	#0,#0			' wait for last byte to be written
+skipzero
 		wrfast	#0,address		'ready to write entire memory starting at address
 		setse1	#%010_000000 | rxpin	'select negative edge on p63
 		nop		       		' give time to settle
@@ -45,4 +58,5 @@ waitbit1_5	res	1			'1.5 bit cycles = 3*clock_freq/baud_rate/2 - 6
 waitbit		res	1			'1 bit cycles = clock_freq/baud_rate - 6
 filesize	res	1			'binary file size in bytes
 address		res	1			'starting address
+forcezero	res	1			'if non-zero, clear RAM
 rxbyte		res	1			'received byte
