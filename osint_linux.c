@@ -43,6 +43,10 @@
 #include <limits.h>
 #include <signal.h>
 
+#ifdef MACOSX
+#include <IOKit/serial/ioss.h>
+#endif
+
 #include "osint.h"
 
 typedef int HANDLE;
@@ -134,11 +138,21 @@ int serial_init(const char* port, unsigned long baud)
 
     fcntl(hSerial, F_SETFL, 0);
     
+#ifndef MACOSX
+    // On MACs I found it causes errors if we try to modify terminal options
+    // AFTER initialization of the baud rate so I moved it to later on in the
+    // sequence below.  This change then enables higher baud rates to work,
+    // at least in OS X 10.10.5 (Yosemite) which was the platform tested.
+    // I would think this is probably safe for other Linux platforms too and
+    // could just become the general approach, rather than be MACOSX specific.
+    // Needs validation first on a Linux platform to be sure it is ok.  (rogloh)
+
     /* set the baud rate */
     if (!serial_baud(baud)) {
         close(hSerial);
         return 0;
     }
+#endif
 
     /* get the current options */
     chk("tcgetattr", tcgetattr(hSerial, &old_sparm));
@@ -164,6 +178,13 @@ int serial_init(const char* port, unsigned long baud)
     chk("tcflush", tcflush(hSerial, TCIFLUSH));
     chk("tcsetattr", tcsetattr(hSerial, TCSANOW, &sparm));
 
+#ifdef MACOSX
+    /* set the baud rate */
+    if (!serial_baud(baud)) {
+        close(hSerial);
+        return 0;
+    }
+#endif
     return 1;
 }
 
@@ -176,6 +197,9 @@ int serial_baud(unsigned long baud)
 {
     struct termios sparm;
     int tbaud = 0;
+#ifdef MACOSX
+    speed_t speed = 0;
+#endif
 static unsigned long last_baud = -1;
 if (baud == last_baud) return 1;
 last_baud = baud;
@@ -231,9 +255,15 @@ last_baud = baud;
             break;
         default:
 #ifdef MACOSX
-            // just try setting baud directly
+            // use IOCTL call to set other baud rates
+            speed = (speed_t)baud;
+            if (ioctl(hSerial, IOSSIOSPEED, &speed) == 0) // if IOCTL succeeds continue
+            {
+                chk("tcflush", tcflush(hSerial, TCIFLUSH));
+                return 1;
+            }
+#endif
             tbaud = baud;
-#else            
             printf("Unsupported baudrate %lu. Use ", baud);
 #ifdef B921600
             printf("921600, ");
@@ -253,7 +283,6 @@ last_baud = baud;
             printf("115200, 57600, 38400, 19200, or 9600\n");
             serial_done();
             exit(2);
-#endif            
             break;
     }
     

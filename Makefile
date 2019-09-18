@@ -33,6 +33,13 @@ else
   OSFILE=osint_linux.c
 endif
 
+# check for MACs
+ifeq ($(shell uname -s),Darwin)
+  DEFS=-DMACOSX
+else
+  DEFS=
+endif
+
 # program for converting MainLoader.spin2 to MainLoader.binary
 PASM=fastspin -2
 
@@ -41,7 +48,7 @@ default: $(BUILD)/loadp2$(EXT)
 HEADERS=MainLoader.h MainLoader1.h
 
 $(BUILD)/loadp2$(EXT): $(BUILD) loadp2.c loadelf.c loadelf.h osint_linux.c osint_mingw.c $(HEADERS)
-	$(CC) -Wall -O -o $@ loadp2.c loadelf.c $(OSFILE)
+	$(CC) -Wall -O $(DEFS) -o $@ loadp2.c loadelf.c $(OSFILE)
 
 clean:
 	rm -rf $(BUILD) *.o $(HEADERS) *.pasm *.bin
