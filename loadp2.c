@@ -90,7 +90,7 @@ promptexit(int r)
 static void Usage(void)
 {
 printf("\
-loadp2 - a loader for the propeller 2 - version 0.017 2019-09-16\n\
+loadp2 - a loader for the propeller 2 - version 0.018 2019-09-18\n\
 usage: loadp2\n\
          [ -p port ]               serial port\n\
          [ -b baud ]               user baud rate (default is %d)\n\
@@ -345,6 +345,13 @@ int loadfilesingle(char *fname)
     return 0;
 }
 
+static unsigned flag_bits()
+{
+    // bit 0: zero out HUB memory
+    // bit 1: binary has been patched with correct frequency
+    return force_zero | (patch_mode << 1);
+}
+
 int loadfile(char *fname, int address)
 {
     int num, size;
@@ -375,7 +382,7 @@ int loadfile(char *fname, int address)
     txval((clock_freq+loader_baud/2)/loader_baud-extra_cycles);
     txval(size);
     txval(address);
-    txval(force_zero);
+    txval(flag_bits());
     tx((uint8_t *)"~", 1);
     msleep(200);
     if (verbose) printf("Loading %s - %d bytes\n", fname, size);
@@ -493,9 +500,6 @@ int main(int argc, char **argv)
     char *port = 0;
     int address = 0;
 
-    // Initialize the loader baud rate
-    loader_baud = get_loader_baud(user_baud, loader_baud);
-
     // Parse the command-line parameters
     for (i = 1; i < argc; i++)
     {
@@ -606,6 +610,18 @@ int main(int argc, char **argv)
         if (verbose) printf("Setting user_baud to %d\n", user_baud);
     }
 
+    // Initialize the loader baud rate
+    // on some platforms the user and loader baud rates must match
+    // this does not matter if we are not starting a terminal
+    if (runterm)
+    {
+        int new_loader_baud = get_loader_baud(user_baud, loader_baud);
+        if (new_loader_baud != loader_baud) {
+            printf("Platform required loader baud to be changed to %d\n", new_loader_baud);
+            loader_baud = new_loader_baud;
+        }
+    }
+    
     // Determine the P2 serial port
     if (!port)
     {

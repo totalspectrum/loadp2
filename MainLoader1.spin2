@@ -1,22 +1,24 @@
 CON
 		rxpin = 63
+		FLAGBIT_ZERO = $1		' if set, zero HUB memory
+		FLAGBIT_PATCHED = $2		' if set, clock frequency was patched into binary
 		
 DAT		org
 
 begin		hubset	clkmode_			'set up oscillator 
-                waitx   ##20_000_000/100        'wait 10 ms
+                waitx   ##25_000_000/100        'wait >10 ms
                 or      clkmode_, #3             'enable XI+PLL mode
                 hubset  clkmode_                 'enable oscillator
-		tjz	forcezero, #skipzero
+		test	flagbits, #FLAGBIT_ZERO wz
+	if_nz	jmp	#skipzero
 		'' zero out memory
 		wrfast	#0,0
 		mov	pb, ##$7c0000/16
-		mov	forcezero, #0
 zeroloop
-		wflong	forcezero
-		wflong	forcezero
-		wflong	forcezero
-		wflong	forcezero
+		wflong	zeros
+		wflong	zeros
+		wflong	zeros
+		wflong	zeros
 		djnz	pb, #zeroloop
 		rdfast	#0,#0			' wait for last byte to be written
 skipzero
@@ -41,22 +43,29 @@ loopend
                 rdfast  #0,#0                   'wait for last byte to be written
 
 		'' short pause for host to change baud
-		''waitx	##20_000_000/10
+		waitx	##25_000_000/10
 		
 		' switch back to rcfast mode, maybe
-		rdlong	 rxbyte, #$18 wz	' fetch program's clock mode
-	if_nz	coginit	 #0, address
+		' if the binary was patched with -PATCH then we skip this
+		test	flagbits, #FLAGBIT_PATCHED wz
+	if_z	jmp	#start_cog		 ' patched, so start right now
+
+		' go back to rcfast mode
 		andn	 clkmode_, #3
 		hubset	 clkmode_
-		waitx	 ##20_000_000/100
+		waitx	 ##25_000_000/100
 		hubset	 #0
+start_cog
 		coginit	#0,address		'launch cog 0 from address
 
+zeros
+		long	0
+		
 		orgf	$80
 clkmode_	res	1			'clock mode
 waitbit1_5	res	1			'1.5 bit cycles = 3*clock_freq/baud_rate/2 - 6
 waitbit		res	1			'1 bit cycles = clock_freq/baud_rate - 6
 filesize	res	1			'binary file size in bytes
 address		res	1			'starting address
-forcezero	res	1			'if non-zero, clear RAM
+flagbits	res	1			'flag bits, see definitions above
 rxbyte		res	1			'received byte

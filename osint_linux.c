@@ -67,12 +67,17 @@ static void chk(char *fun, int sts)
         printf("%s failed\n", fun);
 }
 
+//
+// on Linux, changing baud messes with the DTR/RTS lines, which
+// resets the P2 board :(. So always match user and loader baud
+// rates
+//
 int get_loader_baud(int ubaud, int lbaud)
 {
 #ifdef MACOSX
-    return 921600;
-#else
     return lbaud;
+#else
+    return ubaud;
 #endif
 }
 
@@ -138,53 +143,24 @@ int serial_init(const char* port, unsigned long baud)
 
     fcntl(hSerial, F_SETFL, 0);
     
-#ifndef MACOSX
-    // On MACs I found it causes errors if we try to modify terminal options
-    // AFTER initialization of the baud rate so I moved it to later on in the
-    // sequence below.  This change then enables higher baud rates to work,
-    // at least in OS X 10.10.5 (Yosemite) which was the platform tested.
-    // I would think this is probably safe for other Linux platforms too and
-    // could just become the general approach, rather than be MACOSX specific.
-    // Needs validation first on a Linux platform to be sure it is ok.  (rogloh)
-
-    /* set the baud rate */
-    if (!serial_baud(baud)) {
-        close(hSerial);
-        return 0;
-    }
-#endif
-
     /* get the current options */
     chk("tcgetattr", tcgetattr(hSerial, &old_sparm));
     sparm = old_sparm;
     
     /* set raw input */
-#if 1 || defined(MACOSX)
     cfmakeraw(&sparm);
     sparm.c_cc[VTIME] = 0;
     sparm.c_cc[VMIN] = 1;
-#else
-    memset(&sparm, 0, sizeof(sparm));
-    sparm.c_cflag     = CS8 | CLOCAL | CREAD;
-    sparm.c_lflag     = 0; // &= ~(ICANON | ECHO | ECHOE | ISIG);
-    sparm.c_oflag     = 0; // &= ~OPOST;
-
-    sparm.c_iflag     = IGNPAR | IGNBRK;
-    sparm.c_cc[VTIME] = 0;
-    sparm.c_cc[VMIN] = 1;
-#endif
 
     /* set the options */
     chk("tcflush", tcflush(hSerial, TCIFLUSH));
     chk("tcsetattr", tcsetattr(hSerial, TCSANOW, &sparm));
 
-#ifdef MACOSX
     /* set the baud rate */
     if (!serial_baud(baud)) {
         close(hSerial);
         return 0;
     }
-#endif
     return 1;
 }
 
