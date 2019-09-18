@@ -53,8 +53,8 @@ loopend
 		' go back to rcfast mode
 		andn	 clkmode_, #3
 		hubset	 clkmode_
-		waitx	 ##25_000_000/100
 		hubset	 #0
+		waitx	 ##25_000_000/100
 start_cog
 		coginit	#0,address		'launch cog 0 from address
 
