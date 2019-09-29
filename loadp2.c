@@ -340,7 +340,7 @@ int loadfilesingle(char *fname)
         wait_drain();
     }
 
-    msleep(50);
+    msleep(100);
     if (verbose) printf("%s loaded\n", fname);
     return 0;
 }
@@ -399,7 +399,7 @@ int loadfile(char *fname, int address)
         totnum += num;
     }
     wait_drain();
-    msleep(50);
+    msleep(100);
     if (verbose) printf("%s loaded\n", fname);
     return 0;
 }
