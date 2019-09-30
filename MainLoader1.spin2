@@ -28,8 +28,7 @@ zeroloop
 skipzero
 		'' set up uart smart pins
 		mov    pa, waitbit
-		shl    pa, #16
-		add    pa, #7
+		or     pa, #7	' set for 8 bits
 		wrpin  ##_txmode, #tx_pin
 		wxpin  pa, #tx_pin
 		dirh   #tx_pin
@@ -58,9 +57,15 @@ mainloop
                 rdfast  #0,#0                   'wait for last byte to be written
 		'' respond to host
 		call	#send_chksum
-		
-		'' short pause for host to change baud
-		waitx	##25_000_000/10
+		'' wait
+		mov	temp, waitbit
+		shr	waitbit, #16
+		shl	temp, #5
+		waitx	temp
+		''waitx	##80_000_000/10
+		'' shut down smart pins
+		drvl	#tx_pin
+		drvl	#rx_pin
 		
 		' switch back to rcfast mode, maybe
 		' if the binary was patched with -PATCH then we skip this
