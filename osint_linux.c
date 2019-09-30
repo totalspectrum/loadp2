@@ -52,6 +52,8 @@
 typedef int HANDLE;
 static HANDLE hSerial = -1;
 static struct termios old_sparm;
+static unsigned long last_baud = -1;
+static char last_port[PATH_MAX];
 
 /* normally we use DTR for reset but setting this variable to non-zero will use RTS instead */
 static int use_rts_for_reset = 0;
@@ -74,11 +76,7 @@ static void chk(char *fun, int sts)
 //
 int get_loader_baud(int ubaud, int lbaud)
 {
-#ifdef MACOSX
     return lbaud;
-#else
-    return ubaud;
-#endif
 }
 
 int serial_find(const char* prefix, int (*check)(const char* port, void* data), void* data)
@@ -111,75 +109,13 @@ static void sigint_handler(int signum)
     exit(1);
 }
 
-/**
- * open serial port
- * @param port - COMn port name
- * @param baud - baud rate
- * @returns 1 for success and 0 for failure
- */
-int serial_init(const char* port, unsigned long baud)
+
+static int set_baud(struct termios *sparm, unsigned long baud)
 {
-    struct termios sparm;
-
-    /* open the port */
-#ifdef MACOSX
-    hSerial = open(port, O_RDWR | O_NOCTTY | O_NONBLOCK);
-#else
-    hSerial = open(port, O_RDWR | O_NOCTTY | O_NDELAY | O_NONBLOCK);
-#endif
-    if(hSerial == -1) {
-        //printf("error: opening '%s' -- %s\n", port, strerror(errno));
-        return 0;
-    }
-    
-    signal(SIGINT, sigint_handler);
-    
-    /* set the terminal to exclusive mode */
-    if (ioctl(hSerial, TIOCEXCL) != 0) {
-        //printf("error: can't open terminal for exclusive access\n");
-        close(hSerial);
-        return 0;
-    }
-
-    fcntl(hSerial, F_SETFL, 0);
-    
-    /* get the current options */
-    chk("tcgetattr", tcgetattr(hSerial, &old_sparm));
-    sparm = old_sparm;
-    
-    /* set raw input */
-    cfmakeraw(&sparm);
-    sparm.c_cc[VTIME] = 0;
-    sparm.c_cc[VMIN] = 1;
-
-    /* set the options */
-    chk("tcflush", tcflush(hSerial, TCIFLUSH));
-    chk("tcsetattr", tcsetattr(hSerial, TCSANOW, &sparm));
-
-    /* set the baud rate */
-    if (!serial_baud(baud)) {
-        close(hSerial);
-        return 0;
-    }
-    return 1;
-}
-
-/**
- * change the baud rate of the serial port
- * @param baud - baud rate
- * @returns 1 for success and 0 for failure
- */
-int serial_baud(unsigned long baud)
-{
-    struct termios sparm;
     int tbaud = 0;
 #ifdef MACOSX
     speed_t speed = 0;
 #endif
-static unsigned long last_baud = -1;
-if (baud == last_baud) return 1;
-last_baud = baud;
-
     switch(baud) {
         case 0: // default
             tbaud = B115200;
@@ -263,20 +199,87 @@ last_baud = baud;
     }
     
     /* get the current options */
-    chk("tcgetattr", tcgetattr(hSerial, &sparm));
+    chk("tcgetattr", tcgetattr(hSerial, sparm));
     
     /* set raw input */
 #ifdef MACOSX
-    chk("cfsetspeed", cfsetspeed(&sparm, tbaud));
+    chk("cfsetspeed", cfsetspeed(sparm, tbaud));
 #else
-    chk("cfsetispeed", cfsetispeed(&sparm, tbaud));
-    chk("cfsetospeed", cfsetospeed(&sparm, tbaud));
+    chk("cfsetispeed", cfsetispeed(sparm, tbaud));
+    chk("cfsetospeed", cfsetospeed(sparm, tbaud));
 #endif
+    return 1;
+}
 
+/**
+ * open serial port
+ * @param port - COMn port name
+ * @param baud - baud rate
+ * @returns 1 for success and 0 for failure
+ */
+int serial_init(const char* port, unsigned long baud)
+{
+    struct termios sparm;
+
+    /* open the port */
+#ifdef MACOSX
+    hSerial = open(port, O_RDWR | O_NOCTTY | O_NONBLOCK);
+#else
+    hSerial = open(port, O_RDWR | O_NOCTTY | O_NDELAY | O_NONBLOCK);
+#endif
+    if(hSerial == -1) {
+        //printf("error: opening '%s' -- %s\n", port, strerror(errno));
+        return 0;
+    }
+    last_baud = baud;
+    strncpy(last_port, port, PATH_MAX-1);
+    
+    signal(SIGINT, sigint_handler);
+    
+    /* set the terminal to exclusive mode */
+    if (ioctl(hSerial, TIOCEXCL) != 0) {
+        //printf("error: can't open terminal for exclusive access\n");
+        close(hSerial);
+        return 0;
+    }
+
+    fcntl(hSerial, F_SETFL, 0);
+    
+    /* get the current options */
+    chk("tcgetattr", tcgetattr(hSerial, &old_sparm));
+    sparm = old_sparm;
+    
+    /* set raw input */
+    cfmakeraw(&sparm);
+    sparm.c_cc[VTIME] = 0;
+    sparm.c_cc[VMIN] = 1;
+
+    if (!set_baud(&sparm, baud)) {
+        close(hSerial);
+        return 0;
+    }
+    
     /* set the options */
     chk("tcflush", tcflush(hSerial, TCIFLUSH));
     chk("tcsetattr", tcsetattr(hSerial, TCSANOW, &sparm));
-    
+
+    return 1;
+}
+
+/**
+ * change the baud rate of the serial port
+ * @param baud - baud rate
+ * @returns 1 for success and 0 for failure
+ */
+int serial_baud(unsigned long baud)
+{
+    if (baud != last_baud) {
+        serial_done();
+        if (!serial_init(last_port, baud)) {
+            printf("serial_init of %s failed\n", last_port);
+            exit(1);
+        }
+    }
     return 1;
 }
 
