@@ -1,7 +1,11 @@
 CON
-		rxpin = 63
+		tx_pin = 62
+		rx_pin = 63
 		FLAGBIT_ZERO = $1		' if set, zero HUB memory
 		FLAGBIT_PATCHED = $2		' if set, clock frequency was patched into binary
+  '' smart pin modes
+  _txmode       = %0000_0000_000_0000000000000_01_11110_0 'async tx mode, output enabled for smart output
+  _rxmode       = %0000_0000_000_0000000000000_00_11111_0 'async rx mode, input  enabled for smart input
 		
 DAT		org
 
@@ -22,20 +26,27 @@ zeroloop
 		djnz	pb, #zeroloop
 		rdfast	#0,#0			' wait for last byte to be written
 skipzero
+		'' set up uart smart pins
+		mov    pa, waitbit
+		shl    pa, #16
+		add    pa, #7
+		wrpin  ##_txmode, #tx_pin
+		wxpin  pa, #tx_pin
+		dirh   #tx_pin
+		wrpin  ##_rxmode, #rx_pin
+		wxpin  pa, #rx_pin
+		dirh   #rx_pin
+		
+		
 		wrfast	#0,address		'ready to write entire memory starting at address
-		setse1	#%010_000000 | rxpin	'select negative edge on p63
 		nop		       		' give time to settle
 		
-mainloop	pollse1				'clear edge detector
-		waitse1				'wait for start bit
-		waitx	waitbit1_5		'wait for middle of 1st data bit
+mainloop
+		testp	#rx_pin wc
+	if_nc	jmp	#mainloop
+		rdpin	rxbyte, #rx_pin
+		shr	rxbyte, #24
 
-		rep	@loopend,#8		'get 8 bits
-		testp	#rxpin		wc	'sample rx
-		rcr	rxbyte,#1		'rotate bit into byte
-		waitx	waitbit			'wait for middle of nth data bit
-loopend
-		shr	rxbyte,#32-8		'justify received byte
 		wfbyte	rxbyte			'write to hub
 
 		djnz	filesize,#mainloop	'loop until all bytes received
