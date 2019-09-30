@@ -37,7 +37,11 @@ skipzero
 		wxpin  pa, #rx_pin
 		dirh   #rx_pin
 		
-		
+		'' send 0 to host to indicate we are ready
+setup
+		mov	chksum, #0
+		call	#send_chksum
+
 		wrfast	#0,address		'ready to write entire memory starting at address
 		nop		       		' give time to settle
 		
@@ -46,13 +50,15 @@ mainloop
 	if_nc	jmp	#mainloop
 		rdpin	rxbyte, #rx_pin
 		shr	rxbyte, #24
-
 		wfbyte	rxbyte			'write to hub
+		add	chksum, rxbyte
 
 		djnz	filesize,#mainloop	'loop until all bytes received
 
                 rdfast  #0,#0                   'wait for last byte to be written
-
+		'' respond to host
+		call	#send_chksum
+		
 		'' short pause for host to change baud
 		waitx	##25_000_000/10
 		
@@ -69,6 +75,28 @@ mainloop
 start_cog
 		coginit	#0,address		'launch cog 0 from address
 
+send_chksum
+		mov	temp, chksum
+		shr	temp, #4
+		and	temp, #$f
+		add	temp, #"@"
+		call	#ser_tx
+		mov	temp, chksum
+		and	temp, #$f
+		add	temp, #"@"
+		call	#ser_tx
+		mov	temp, #" "
+		call	#ser_tx
+		ret
+		
+ser_tx
+		wypin	temp, #tx_pin
+		waitx	#20
+.txflush
+		testp	#tx_pin wc
+	if_nc	jmp	#.txflush
+		ret
+		
 zeros
 		long	0
 		
@@ -80,3 +108,5 @@ filesize	res	1			'binary file size in bytes
 address		res	1			'starting address
 flagbits	res	1			'flag bits, see definitions above
 rxbyte		res	1			'received byte
+temp		res	1
+chksum		res	1
