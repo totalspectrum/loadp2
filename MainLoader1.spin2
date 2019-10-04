@@ -40,7 +40,6 @@ skipzero
 setup
 		mov	chksum, #0
 		call	#send_chksum
-		mov	address, #0		' FIXME
 		
 		wrfast	#0,address		'ready to write entire memory starting at address
 		nop		       		' give time to settle
@@ -74,14 +73,9 @@ mainloop
 		waitx	##80_000_000
 		jmp	#.done
 #endif
-#ifdef FIXME
-		'' wait
-		mov	temp, waitbit
-		shr	temp, #16
-		shl	temp, #5
-		waitx	temp
-#endif		
-		waitx	##80_000_000/10		' FIXME
+
+		waitx	##80_000_000/10		' short pause to ensure sync
+		
 		'' shut down smart pins
 		dirl	#tx_pin
 		dirl	#rx_pin
