@@ -400,14 +400,15 @@ int loadfile(char *fname, int address)
         msleep(200);
     } else {
         // receive checksum, verify it's "@@ "
-        num = rx_timeout((uint8_t *)buffer, 3, 500);
+        msleep(200);
+        num = rx_timeout((uint8_t *)buffer, 3, 400);
         if (num != 3) {
             printf("ERROR: timeout waiting for initial checksum: got %d\n", num);
-            exit(1);
+            promptexit(1);
         }
         if (buffer[0] != '@' || buffer[1] != '@') {
             printf("ERROR: got incorrect initial chksum: %c%c%c\n", buffer[0], buffer[1], buffer[2]);
-            exit(1);
+            promptexit(1);
         }
     }
     if (verbose) printf("Loading %s - %d bytes\n", fname, size);
@@ -431,19 +432,19 @@ int loadfile(char *fname, int address)
     if (load_mode == LOAD_CHIP) {
         int recv_chksum = 0;
         wait_drain();
-        num = rx_timeout((uint8_t *)buffer, 3, 800);
+        num = rx_timeout((uint8_t *)buffer, 3, 400);
         if (num != 3) {
             printf("ERROR: timeout waiting for checksum at end: got %d\n", num);
-            exit(1);
+            promptexit(1);
         }
         recv_chksum = (buffer[0] - '@') << 4;
         recv_chksum += (buffer[1] - '@');
         chksum &= 0xff;
-        if (verbose) printf("chksum: %x\n", recv_chksum);
         if (recv_chksum != (chksum & 0xff)) {
             printf("ERROR: bad checksum, expected %02x got %02x (chksum characters %c%c%c)\n", chksum, recv_chksum, buffer[0], buffer[1], buffer[2]);
-            exit(1);
+            promptexit(1);
         }
+        if (verbose) printf("chksum: %x OK\n", recv_chksum);
     } else {
         wait_drain();
     }

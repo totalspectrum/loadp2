@@ -40,7 +40,8 @@ skipzero
 setup
 		mov	chksum, #0
 		call	#send_chksum
-
+		mov	address, #0		' FIXME
+		
 		wrfast	#0,address		'ready to write entire memory starting at address
 		nop		       		' give time to settle
 		
@@ -55,23 +56,42 @@ mainloop
 		djnz	filesize,#mainloop	'loop until all bytes received
 
                 rdfast  #0,#0                   'wait for last byte to be written
+
 		'' respond to host
 		call	#send_chksum
+
+#ifdef NEVER
+.done
+		'' verify memory
+		mov	chksum, #0
+		mov	filesize, ##$8000
+		mov	ptra, address
+.again
+		rdbyte	rxbyte, ptra++
+		add	chksum, rxbyte
+		djnz	filesize, #.again
+		call	#send_chksum
+		waitx	##80_000_000
+		jmp	#.done
+#endif
+#ifdef FIXME
 		'' wait
 		mov	temp, waitbit
-		shr	waitbit, #16
+		shr	temp, #16
 		shl	temp, #5
 		waitx	temp
-		''waitx	##80_000_000/10
+#endif		
+		waitx	##80_000_000/10		' FIXME
 		'' shut down smart pins
-		drvl	#tx_pin
-		drvl	#rx_pin
+		dirl	#tx_pin
+		dirl	#rx_pin
+		wrpin	#0, #tx_pin
+		wrpin	#0, #rx_pin
 		
 		' switch back to rcfast mode, maybe
 		' if the binary was patched with -PATCH then we skip this
 		test	flagbits, #FLAGBIT_PATCHED wz
-	if_z	jmp	#start_cog		 ' patched, so start right now
-
+	if_nz	jmp	#start_cog		 ' patched, so start right now
 		' go back to rcfast mode
 		andn	 clkmode_, #3
 		hubset	 clkmode_
