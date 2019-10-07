@@ -469,9 +469,11 @@ void terminal_mode(int check_for_exit, int pst_mode)
                       if (sawexit_valid)
                         {
                           exitcode = buf[i];
+                          //printf("exitcode: %02x\n", buf[i]);
                           continue_terminal = 0;
                         }
                       else if (sawexit_char) {
+                        //printf("exitchar 2: %02x\n", buf[i]);
                         if (buf[i] == 0) {
                           sawexit_valid = 1;
                         } else {
@@ -480,6 +482,7 @@ void terminal_mode(int check_for_exit, int pst_mode)
                           sawexit_char = 0;
                         }
                       } else if (((int)buf[i] & 0xff) == exit_char) {
+                        //printf("exitchar: %02x\n", buf[i]);
                         sawexit_char = 1;
                       } else {
                         realbuf[realbytes++] = buf[i];
