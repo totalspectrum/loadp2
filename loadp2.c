@@ -48,6 +48,7 @@ static int extra_cycles = 7;
 static int load_mode = -1;
 static int patch_mode = 0;
 static int use_checksum = 1;
+static int quiet_mode = 0;
 
 int get_loader_baud(int ubaud, int lbaud);
 
@@ -90,7 +91,7 @@ promptexit(int r)
 static void Usage(void)
 {
 printf("\
-loadp2 - a loader for the propeller 2 - version 0.019 2019-09-30\n\
+loadp2 - a loader for the propeller 2 - version 0.020 2019-10-07\n\
 usage: loadp2\n\
          [ -p port ]               serial port\n\
          [ -b baud ]               user baud rate (default is %d)\n\
@@ -102,6 +103,7 @@ usage: loadp2\n\
          [ -T ]                    enter PST-compatible terminal mode\n\
          [ -v ]                    enable verbose mode\n\
          [ -k ]                    wait for user input before exit\n\
+         [ -q ]                    quiet mode: also checks for magic escape sequence\n\
          [ -? ]                    display a usage message and exit\n\
          [ -CHIP ]                 set load mode for CHIP\n\
          [ -FPGA ]                 set load mode for FPGA\n\
@@ -603,6 +605,10 @@ int main(int argc, char **argv)
             {
                 waitAtExit = 1;
             }
+            else if (argv[i][1] == 'q')
+            {
+                quiet_mode = 1;
+            }
             else if (argv[i][1] == 'm')
             {
                 if(argv[i][2])
@@ -722,9 +728,13 @@ int main(int argc, char **argv)
     if (runterm)
     {
         serial_baud(user_baud);
-        printf("( Entering terminal mode.  Press Ctrl-] to exit. )\n");
+        if (!quiet_mode) {
+            printf("( Entering terminal mode.  Press Ctrl-] to exit. )\n");
+        }
         terminal_mode(1,pstmode);
-        waitAtExit = 0; // no need to wait, user explicitly quite
+        if (!quiet_mode) {
+            waitAtExit = 0; // no need to wait, user explicitly quite
+        }
     }
 
     serial_done();
