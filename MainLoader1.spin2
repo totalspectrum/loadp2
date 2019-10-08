@@ -90,8 +90,8 @@ mainloop
 		andn	 clkmode_, #3
 		hubset	 clkmode_
 		hubset	 #0
-		waitx	 ##25_000_000/100
 start_cog
+		waitx	 ##25_000_000/10
 		coginit	#0,address		'launch cog 0 from address
 
 send_chksum
