@@ -435,13 +435,14 @@ void terminal_mode(int check_for_exit, int pst_mode)
     int exitcode = 0;
     int continue_terminal = 1;
 
-    tcgetattr(STDIN_FILENO, &oldt);
-    newt = oldt;
-    newt.c_lflag &= ~(ICANON | ECHO | ISIG);
-    newt.c_iflag &= ~(ICRNL | INLCR);
-    newt.c_oflag &= ~OPOST;
-    tcsetattr(STDIN_FILENO, TCSANOW, &newt);
-
+    if (isatty(STDIN_FILENO)) {
+        tcgetattr(STDIN_FILENO, &oldt);
+        newt = oldt;
+        newt.c_lflag &= ~(ICANON | ECHO | ISIG);
+        newt.c_iflag &= ~(ICRNL | INLCR);
+        newt.c_oflag &= ~OPOST;
+        tcsetattr(STDIN_FILENO, TCSANOW, &newt);
+    }
     if (check_for_exit)
       {
         exit_char = 0xff;
@@ -508,7 +509,9 @@ void terminal_mode(int check_for_exit, int pst_mode)
     } while (continue_terminal);
 
 done:
-    tcsetattr(STDIN_FILENO, TCSANOW, &oldt);
+    if (isatty(STDIN_FILENO)) {
+        tcsetattr(STDIN_FILENO, TCSANOW, &oldt);
+    }
 
     if (sawexit_valid)
       {
