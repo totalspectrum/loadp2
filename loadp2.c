@@ -69,7 +69,7 @@ static char *buffer = (char *)ibuf;
 static char *binbuffer = (char *)ibin;
 static int verbose = 0;
 static int waitAtExit = 0;
-static int force_zero = 0;
+static int force_zero = 1;  /* default to zeroing memory */
 
 /* promptexit: print a prompt if waitAtExit is set, then exit */
 void
@@ -109,7 +109,7 @@ usage: loadp2\n\
          [ -FPGA ]                 set load mode for FPGA\n\
          [ -SINGLE ]               set load mode for single stage\n\
          [ -PATCH ]                patch in clock frequency and serial parms\n\
-         [ -ZERO ]                 force memory to be zeroed before download\n\
+         [ -NOZERO ]               do not clear memory before download\n\
          file                      file to load\n", user_baud, loader_baud, clock_freq, clock_mode);
     promptexit(1);
 }
@@ -641,8 +641,8 @@ int main(int argc, char **argv)
                 load_mode = LOAD_FPGA;
             else if (!strcmp(argv[i], "-SINGLE"))
                 load_mode = LOAD_SINGLE;
-            else if (!strcmp(argv[i], "-ZERO"))
-                force_zero = 1;
+            else if (!strcmp(argv[i], "-NOZERO"))
+                force_zero = 0;
             else
             {
                 printf("Invalid option %s\n", argv[i]);
