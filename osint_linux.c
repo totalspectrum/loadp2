@@ -222,7 +222,7 @@ int serial_init(const char* port, unsigned long baud)
     struct termios sparm;
 
     /* open the port */
-#ifdef MACOSX
+#if defined(MACOSX)
     hSerial = open(port, O_RDWR | O_NOCTTY | O_NONBLOCK);
 #else
     hSerial = open(port, O_RDWR | O_NOCTTY | O_NDELAY | O_NONBLOCK);
@@ -235,14 +235,18 @@ int serial_init(const char* port, unsigned long baud)
     strncpy(last_port, port, PATH_MAX-1);
     
     signal(SIGINT, sigint_handler);
-    
+
+#ifdef NEVER
     /* set the terminal to exclusive mode */
+    /* this actually doesn't work because we need to re-open it to
+       change baud */
     if (ioctl(hSerial, TIOCEXCL) != 0) {
         //printf("error: can't open terminal for exclusive access\n");
         close(hSerial);
         return 0;
     }
-
+#endif
+    
     fcntl(hSerial, F_SETFL, 0);
     
     /* get the current options */
@@ -258,11 +262,11 @@ int serial_init(const char* port, unsigned long baud)
         close(hSerial);
         return 0;
     }
-    
+
     /* set the options */
     chk("tcflush", tcflush(hSerial, TCIFLUSH));
     chk("tcsetattr", tcsetattr(hSerial, TCSANOW, &sparm));
-
+    
     return 1;
 }
 
@@ -274,7 +278,7 @@ int serial_init(const char* port, unsigned long baud)
 int serial_baud(unsigned long baud)
 {
     if (baud != last_baud) {
-        serial_done();
+//        serial_done();
         if (!serial_init(last_port, baud)) {
             printf("serial_init of %s failed\n", last_port);
             exit(1);
