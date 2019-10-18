@@ -254,10 +254,18 @@ int serial_init(const char* port, unsigned long baud)
     sparm = old_sparm;
     
     /* set raw input */
+#ifdef MACOSX    
     cfmakeraw(&sparm);
     sparm.c_cc[VTIME] = 0;
     sparm.c_cc[VMIN] = 1;
-
+#else
+    memset(&sparm, 0, sizeof(sparm));
+    sparm.c_cflag = CS8 | CLOCAL | CREAD;
+    sparm.c_iflag = IGNPAR | IGNBRK;
+    sparm.c_cc[VTIME] = 0;
+    sparm.c_cc[VMIN] = 1;
+#endif
+    
     if (!set_baud(&sparm, baud)) {
         close(hSerial);
         return 0;
