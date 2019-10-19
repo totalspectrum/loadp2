@@ -228,9 +228,9 @@ int rx_timeout(uint8_t* buff, int n, int timeout)
 void hwreset(void)
 {
     EscapeCommFunction(hSerial, use_rts_for_reset ? SETRTS : SETDTR);
-    Sleep(25);
+    Sleep(2);
     EscapeCommFunction(hSerial, use_rts_for_reset ? CLRRTS : CLRDTR);
-    Sleep(90);
+    Sleep(2);
     // Purge here after reset helps to get rid of buffered data.
     PurgeComm(hSerial, PURGE_TXABORT | PURGE_RXABORT | PURGE_TXCLEAR | PURGE_RXCLEAR);
 }

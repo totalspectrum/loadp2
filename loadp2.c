@@ -91,7 +91,7 @@ promptexit(int r)
 static void Usage(void)
 {
 printf("\
-loadp2 - a loader for the propeller 2 - version 0.022 2019-10-18\n\
+loadp2 - a loader for the propeller 2 - version 0.023 2019-10-19\n\
 usage: loadp2\n\
          [ -p port ]               serial port\n\
          [ -b baud ]               user baud rate (default is %d)\n\
@@ -291,8 +291,8 @@ int loadfilesingle(char *fname)
         return 1;
     }
     if (verbose) printf("Loading %s - %d bytes\n", fname, size);
-    hwreset();
-    msleep(50);
+//    hwreset();
+//    msleep(50);
     tx((uint8_t *)"> Prop_Hex 0 0 0 0", 18);
 
     while ((num=loadBytes(binbuffer, 128)))
@@ -370,11 +370,11 @@ int loadfile(char *fname, int address)
         printf("Could not open %s\n", fname);
         return 1;
     }
-    hwreset();
+//    hwreset();
+//    msleep(50);
     if (verbose) {
         printf("Loading fast loader for %s...\n", (load_mode == LOAD_FPGA) ? "fpga" : "chip");
     }
-    msleep(100);
     tx((uint8_t *)"> Prop_Hex 0 0 0 0", 18);
     if (load_mode == LOAD_FPGA) {
         txstring((uint8_t *)MainLoader_bin, MainLoader_bin_len);
@@ -455,54 +455,63 @@ int loadfile(char *fname, int address)
     return 0;
 }
 
+// look for a p2
+// returns delay to use for it after reset
 int findp2(char *portprefix, int baudrate)
 {
     int i, num;
+    int retry;
+    int sleeptime = 50;
+    
     char Port[100];
     char buffer[101];
 
     if (verbose) printf("Searching serial ports for a P2\n");
-    for (i = 0; i < 20; i++)
-    {
-        sprintf(Port, "%s%d", portprefix, i);
-        if (serial_init(Port, baudrate))
+    for (retry = 0; retry < 2; retry++) {
+        for (i = 0; i < 20; i++)
         {
-            if (verbose) printf("trying %s...\n", Port);
-            hwreset();
-            msleep(100);
-            tx((uint8_t *)"> Prop_Chk 0 0 0 0  ", 20);
-            msleep(50);
-            num = rx_timeout((uint8_t *)buffer, 100, 10);
-            if (num >= 0) buffer[num] = 0;
-            else {
-                buffer[0] = 0;
-                if (verbose) printf("  timeout\n");
-            }
-            if (!strncmp(buffer, "\r\nProp_Ver ", 11))
+            sprintf(Port, "%s%d", portprefix, i);
+            if (serial_init(Port, baudrate))
             {
-                if (verbose) printf("P2 version %c found on serial port %s\n", buffer[11], Port);
-                if (load_mode == -1)
-                {
-                    if (buffer[11] == 'B')
-                    {
-                        load_mode = LOAD_FPGA;
-                        if (verbose) printf("Setting load mode to FPGA\n");
-                    }
-                    else if (buffer[11] == 'A' || buffer[11] == 'G')
-                    {
-                        load_mode = LOAD_CHIP;
-                        if (verbose) printf("Setting load mode to CHIP\n");
-                    }
-                    else
-                    {
-                        printf("Warning: Unknown version %c, assuming CHIP\n", buffer[11]);
-                        load_mode = LOAD_CHIP;
-                    }
+                if (verbose) printf("trying %s...\n", Port);
+                hwreset();
+                msleep(sleeptime);
+                tx((uint8_t *)"> Prop_Chk 0 0 0 0  ", 20);
+                msleep(50);
+                num = rx_timeout((uint8_t *)buffer, 100, 10);
+                if (num >= 0) buffer[num] = 0;
+                else {
+                    buffer[0] = 0;
+                    if (verbose) printf("  timeout\n");
                 }
-                return 1;
+                if (!strncmp(buffer, "\r\nProp_Ver ", 11))
+                {
+                    if (verbose) printf("P2 version %c found on serial port %s\n", buffer[11], Port);
+                    if (load_mode == -1)
+                    {
+                        if (buffer[11] == 'B')
+                        {
+                            load_mode = LOAD_FPGA;
+                            if (verbose) printf("Setting load mode to FPGA\n");
+                        }
+                        else if (buffer[11] == 'A' || buffer[11] == 'G')
+                        {
+                            load_mode = LOAD_CHIP;
+                            if (verbose) printf("Setting load mode to CHIP\n");
+                        }
+                        else
+                        {
+                            printf("Warning: Unknown version %c, assuming CHIP\n", buffer[11]);
+                            load_mode = LOAD_CHIP;
+                        }
+                    }
+                    return sleeptime;
+                }
+                serial_done();
             }
-            serial_done();
         }
+        // no port found yet? sleep a while and try again
+        sleeptime += 400;
     }
     return 0;
 }

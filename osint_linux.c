@@ -198,9 +198,6 @@ static int set_baud(struct termios *sparm, unsigned long baud)
             break;
     }
     
-    /* get the current options */
-    chk("tcgetattr", tcgetattr(hSerial, sparm));
-    
     /* set raw input */
 #ifdef MACOSX
     chk("cfsetspeed", cfsetspeed(sparm, tbaud));
@@ -404,12 +401,10 @@ void hwreset(void)
 {
     int cmd = use_rts_for_reset ? TIOCM_RTS : TIOCM_DTR;
     ioctl(hSerial, TIOCMBIS, &cmd); /* assert bit */
-    msleep(10);
+    msleep(2);
     ioctl(hSerial, TIOCMBIC, &cmd); /* clear bit */
-    msleep(10);
+    msleep(2);
     ioctl(hSerial, TIOCMBIS, &cmd); /* assert bit */
-    msleep(90);
-    tcflush(hSerial, TCIFLUSH);
 }
 #endif
 
