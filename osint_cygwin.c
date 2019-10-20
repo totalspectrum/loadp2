@@ -235,7 +235,7 @@ void hwreset(void)
     EscapeCommFunction(hSerial, use_rts_for_reset ? SETRTS : SETDTR);
     Sleep(2);
     EscapeCommFunction(hSerial, use_rts_for_reset ? CLRRTS : CLRDTR);
-    Sleep(2);
+    Sleep(25);
     // Purge here after reset to get rid of buffered data. Prevents "Lost HW Contact 0 f9"
     PurgeComm(hSerial, PURGE_TXABORT | PURGE_RXABORT | PURGE_TXCLEAR | PURGE_RXCLEAR);
 }
