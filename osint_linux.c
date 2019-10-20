@@ -405,6 +405,7 @@ void hwreset(void)
     ioctl(hSerial, TIOCMBIC, &cmd); /* clear bit */
     msleep(2);
     ioctl(hSerial, TIOCMBIS, &cmd); /* assert bit */
+    tcflush(hSerial, TCIFLUSH);
 }
 #endif
 
