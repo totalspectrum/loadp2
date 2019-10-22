@@ -2,6 +2,7 @@
  *
  * Copyright (c) 2009 by John Steven Denson
  * Modified in 2011 by David Michael Betz
+ * Modified in 2019 by Eric Smith
  *
  * MIT License                                                           
  *
@@ -152,6 +153,15 @@ int serial_baud(unsigned long baud)
 }
 
 /**
+ * flush (discard) all pending input
+ */
+int flush_input(void)
+{
+    PurgeComm(hSerial, PURGE_TXABORT | PURGE_RXABORT | PURGE_TXCLEAR | PURGE_RXCLEAR);
+    return 0;
+}
+
+/**
  * wait till transmit buffer is empty
  * for Windows we just wait 100 msec
  * returns zero
@@ -161,6 +171,8 @@ int wait_drain(void)
     msleep(100);
     return 0;
 }
+    // Purge here after reset to get rid of buffered data. Prevents "Lost HW Contact 0 f9"
+    PurgeComm(hSerial, PURGE_TXABORT | PURGE_RXABORT | PURGE_TXCLEAR | PURGE_RXCLEAR);
 
 void serial_done(void)
 {
@@ -235,7 +247,7 @@ void hwreset(void)
     EscapeCommFunction(hSerial, use_rts_for_reset ? SETRTS : SETDTR);
     Sleep(2);
     EscapeCommFunction(hSerial, use_rts_for_reset ? CLRRTS : CLRDTR);
-    Sleep(25);
+    Sleep(2);
     // Purge here after reset to get rid of buffered data. Prevents "Lost HW Contact 0 f9"
     PurgeComm(hSerial, PURGE_TXABORT | PURGE_RXABORT | PURGE_TXCLEAR | PURGE_RXCLEAR);
 }

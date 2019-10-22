@@ -293,6 +293,14 @@ int serial_baud(unsigned long baud)
 }
 
 /**
+ * flush all input
+ */
+int flush_input(void)
+{
+    return tcflush(hSerial, TCIFLUSH);
+}
+
+/**
  * wait for tx buffer to be empty
  */
 int wait_drain(void)
@@ -386,17 +394,6 @@ int rx_timeout(uint8_t* buff, int n, int timeout)
  * @param sparm - pointer to DCB serial control struct
  * @returns void
  */
-#if 0
-void hwreset(void)
-{
-    int cmd = use_rts_for_reset ? TIOCM_RTS : TIOCM_DTR;
-    ioctl(hSerial, TIOCMBIS, &cmd); /* assert bit */
-    msleep(10);
-    ioctl(hSerial, TIOCMBIC, &cmd); /* clear bit */
-    msleep(90);
-    tcflush(hSerial, TCIFLUSH);
-}
-#else
 void hwreset(void)
 {
     int cmd = use_rts_for_reset ? TIOCM_RTS : TIOCM_DTR;
@@ -405,10 +402,9 @@ void hwreset(void)
     ioctl(hSerial, TIOCMBIC, &cmd); /* clear bit */
     msleep(2);
     ioctl(hSerial, TIOCMBIS, &cmd); /* assert bit */
-    msleep(25);
+    msleep(2);
     tcflush(hSerial, TCIFLUSH);
 }
-#endif
 
 /**
  * sleep for ms milliseconds
