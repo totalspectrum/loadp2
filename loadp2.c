@@ -465,11 +465,11 @@ checkp2_and_init(char *Port, int baudrate)
     }
 
     hwreset();
-    flush_input();
     
     if (verbose) printf("trying %s...\n", Port);
 
     for (i = 0; i < 5; i++) {
+        flush_input();
         tx((uint8_t *)"> Prop_Chk 0 0 0 0  ", 20);
         msleep(20);
         num = rx_timeout((uint8_t *)buffer, 20, 10);
