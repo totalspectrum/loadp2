@@ -70,6 +70,7 @@ static char *binbuffer = (char *)ibin;
 static int verbose = 0;
 static int waitAtExit = 0;
 static int force_zero = 1;  /* default to zeroing memory */
+static int do_hwreset = 1;
 
 /* promptexit: print a prompt if waitAtExit is set, then exit */
 void
@@ -91,7 +92,7 @@ promptexit(int r)
 static void Usage(void)
 {
 printf("\
-loadp2 - a loader for the propeller 2 - version 0.026 2019-10-21\n\
+loadp2 - a loader for the propeller 2 - version 0.027 2019-10-23\n\
 usage: loadp2\n\
          [ -p port ]               serial port\n\
          [ -b baud ]               user baud rate (default is %d)\n\
@@ -104,6 +105,7 @@ usage: loadp2\n\
          [ -v ]                    enable verbose mode\n\
          [ -k ]                    wait for user input before exit\n\
          [ -q ]                    quiet mode: also checks for magic escape sequence\n\
+         [ -n ]                    no reset; skip any hardware reset\n\
          [ -? ]                    display a usage message and exit\n\
          [ -CHIP ]                 set load mode for CHIP\n\
          [ -FPGA ]                 set load mode for FPGA\n\
@@ -464,8 +466,12 @@ checkp2_and_init(char *Port, int baudrate)
         return 0;
     }
 
+    if (!do_hwreset) {
+        return 1;
+    }
+
+    // reset and look for a P2
     hwreset();
-    
     if (verbose) printf("trying %s...\n", Port);
 
     for (i = 0; i < 5; i++) {
@@ -502,6 +508,7 @@ checkp2_and_init(char *Port, int baudrate)
             return 1;
         }
     }
+    // if we get here we failed to find a chip
     serial_done();
     return 0;
 }
@@ -628,6 +635,10 @@ int main(int argc, char **argv)
             {
                 quiet_mode = 1;
             }
+            else if (argv[i][1] == 'n')
+            {
+                do_hwreset = 0;
+            }
             else if (argv[i][1] == 'm')
             {
                 if(argv[i][2])
@@ -675,7 +686,7 @@ int main(int argc, char **argv)
         }
     }
 
-    if (!fname && (!port || !runterm)) Usage();
+    if (!fname && !runterm) Usage();
 
     // Determine the user baud rate
     if (user_baud == -1)
@@ -693,6 +704,9 @@ int main(int argc, char **argv)
         if (new_loader_baud != loader_baud) {
             printf("Platform required loader baud to be changed to %d\n", new_loader_baud);
             loader_baud = new_loader_baud;
+        }
+        if (!fname) {
+            loader_baud = user_baud;
         }
     }
     
