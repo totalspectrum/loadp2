@@ -32,6 +32,10 @@
 #include "osint.h"
 #include "loadelf.h"
 
+#define NO_ENTER    0
+#define ENTER_TAQOZ 1
+#define ENTER_DEBUG 2
+
 #define LOAD_CHIP   0
 #define LOAD_FPGA   1
 #define LOAD_SINGLE 2
@@ -49,6 +53,7 @@ static int load_mode = -1;
 static int patch_mode = 0;
 static int use_checksum = 1;
 static int quiet_mode = 0;
+static int enter_rom = NO_ENTER;
 
 int get_loader_baud(int ubaud, int lbaud);
 
@@ -92,7 +97,7 @@ promptexit(int r)
 static void Usage(void)
 {
 printf("\
-loadp2 - a loader for the propeller 2 - version 0.028 2019-11-07\n\
+loadp2 - a loader for the propeller 2 - version 0.029 2019-11-07\n\
 usage: loadp2\n\
          [ -p port ]               serial port\n\
          [ -b baud ]               user baud rate (default is %d)\n\
@@ -107,11 +112,13 @@ usage: loadp2\n\
          [ -q ]                    quiet mode: also checks for magic escape sequence\n\
          [ -n ]                    no reset; skip any hardware reset\n\
          [ -? ]                    display a usage message and exit\n\
+         [ -xDEBUG ]               enter ROM debug monitor\n\
+         [ -xTAQOZ ]               enter ROM version of TAQOZ\n\
          [ -CHIP ]                 set load mode for CHIP\n\
          [ -FPGA ]                 set load mode for FPGA\n\
-         [ -SINGLE ]               set load mode for single stage\n\
          [ -PATCH ]                patch in clock frequency and serial parms\n\
          [ -NOZERO ]               do not clear memory before download\n\
+         [ -SINGLE ]               set load mode for single stage\n\
          file                      file to load\n", user_baud, loader_baud, clock_freq, clock_mode);
     promptexit(1);
 }
@@ -661,6 +668,26 @@ int main(int argc, char **argv)
                 runterm = 1;
             else if (argv[i][1] == 'T')
                 runterm = pstmode = 1;
+            else if (argv[i][1] == 'x') {
+                char *monitor = NULL;
+                if (argv[i][2])
+                    monitor = &argv[i][2];
+                else if (++i < argc)
+                    monitor = &argv[i][0];
+                else
+                    Usage();
+                if (monitor) {
+                    if (!strcmp(monitor, "TAQOZ")) {
+                        enter_rom = ENTER_TAQOZ;
+                    } else if (!strcmp(monitor, "DEBUG")) {
+                        enter_rom = ENTER_DEBUG;
+                    } else {
+                        Usage();
+                    }
+                } else {
+                    Usage();
+                }
+            }
             else if (argv[i][1] == 'v')
                 verbose = 1;
             else if (!strcmp(argv[i], "-PATCH"))
@@ -686,6 +713,15 @@ int main(int argc, char **argv)
         }
     }
 
+    if (enter_rom) {
+        if (!runterm) {
+            runterm = 1;
+        }
+        if (fname) {
+            printf("Entering ROM is incompatible with downloading a file\n");
+            Usage();
+        }
+    }
     if (!fname && !runterm) Usage();
 
     // Determine the user baud rate
@@ -763,6 +799,16 @@ int main(int argc, char **argv)
     if (runterm)
     {
         serial_baud(user_baud);
+        switch(enter_rom) {
+        case ENTER_DEBUG:
+            tx((uint8_t *)"> \004", 3);
+            break;
+        case ENTER_TAQOZ:
+            tx((uint8_t *)"> \033", 3);
+            break;
+        default:
+            break;
+        }
         if (!quiet_mode) {
             printf("( Entering terminal mode.  Press Ctrl-] to exit. )\n");
         }
