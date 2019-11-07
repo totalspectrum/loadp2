@@ -443,9 +443,7 @@ void terminal_mode(int check_for_exit, int pst_mode)
     if (isatty(STDIN_FILENO)) {
         tcgetattr(STDIN_FILENO, &oldt);
         newt = oldt;
-        newt.c_lflag &= ~(ICANON | ECHO | ISIG);
-        newt.c_iflag &= ~(ICRNL | INLCR);
-        newt.c_oflag &= ~OPOST;
+        cfmakeraw(&newt);
         tcsetattr(STDIN_FILENO, TCSANOW, &newt);
     }
     if (check_for_exit)
