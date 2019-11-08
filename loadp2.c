@@ -690,6 +690,10 @@ int main(int argc, char **argv)
             }
             else if (argv[i][1] == 'v')
                 verbose = 1;
+            else if (argv[i][1] == '?')
+            {
+                Usage();
+            }
             else if (!strcmp(argv[i], "-PATCH"))
                 patch_mode = 1;
             else if (!strcmp(argv[i], "-CHIP"))
