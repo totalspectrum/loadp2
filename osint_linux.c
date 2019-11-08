@@ -279,15 +279,19 @@ int serial_init(const char* port, unsigned long baud)
  * change the baud rate of the serial port
  * @param baud - baud rate
  * @returns 1 for success and 0 for failure
+ * On Linux this gets tricky, if the last handle to the port is closed the
+ * kernel drops DTR, resetting the board. So we have to initialize a whole
+ * new handle and then close the old one.
  */
 int serial_baud(unsigned long baud)
 {
     if (baud != last_baud) {
-//        serial_done();
+        HANDLE oldSerial = hSerial;
         if (!serial_init(last_port, baud)) {
             printf("serial_init of %s failed\n", last_port);
             exit(1);
         }
+        close(oldSerial);
     }
     return 1;
 }
