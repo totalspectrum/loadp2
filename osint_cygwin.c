@@ -163,12 +163,12 @@ int flush_input(void)
 
 /**
  * wait till transmit buffer is empty
- * for Windows we just wait 100 msec
+ * for Windows we just wait for a bit
  * returns zero
  */
 int wait_drain(void)
 {
-    msleep(100);
+    msleep(30);
     return 0;
 }
     // Purge here after reset to get rid of buffered data. Prevents "Lost HW Contact 0 f9"
