@@ -71,8 +71,9 @@ static void chk(char *fun, int sts)
 
 //
 // on Linux, changing baud messes with the DTR/RTS lines, which
-// resets the P2 board :(. So always match user and loader baud
-// rates
+// resets the P2 board :(. This function used to exist to force the
+// loader baud to match the user baud. We work around the problem
+// now by re-opening the handle, but this legacy code is left over.
 //
 int get_loader_baud(int ubaud, int lbaud)
 {
@@ -279,9 +280,9 @@ int serial_init(const char* port, unsigned long baud)
  * change the baud rate of the serial port
  * @param baud - baud rate
  * @returns 1 for success and 0 for failure
- * On Linux this gets tricky, if the last handle to the port is closed the
- * kernel drops DTR, resetting the board. So we have to initialize a whole
- * new handle and then close the old one.
+ * On Linux this gets tricky, changiing baud on an already open
+ * handle drops DTR and resets the board. So we have to initialize
+ * new connection and then close the old one.
  */
 int serial_baud(unsigned long baud)
 {
