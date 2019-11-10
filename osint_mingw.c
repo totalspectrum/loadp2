@@ -290,6 +290,30 @@ static void ShowLastError(void)
     exit(1); // exit on error
 }
 
+#ifndef ENABLE_VIRTUAL_TERMINAL_PROCESSING
+#define ENABLE_VIRTUAL_TERMINAL_PROCESSING 0x0004
+#endif
+#ifndef ENABLE_VIRTUAL_TERMINAL_INPUT
+#define ENABLE_VIRTUAL_TERMINAL_INPUT 0x0200
+#endif
+
+void EnableVTMode()
+{
+    HANDLE hOut = GetStdHandle(STD_OUTPUT_HANDLE);
+    HANDLE hIn = GetStdHandle(STD_INPUT_HANDLE);
+    DWORD dwMode;
+    
+    if (hOut == INVALID_HANDLE_VALUE) return;
+    if (!GetConsoleMode(hOut, &dwMode)) return;
+    dwMode |= ENABLE_VIRTUAL_TERMINAL_PROCESSING;
+    SetConsoleMode(hOut, dwMode);
+
+    if (hIn == INVALID_HANDLE_VALUE) return;
+    if (!GetConsoleMode(hIn, &dwMode)) return;
+    dwMode |= ENABLE_VIRTUAL_TERMINAL_INPUT;
+    SetConsoleMode(hIn, dwMode);
+}
+    
 /*
  * if "check_for_exit" is true, then
  * a sequence EXIT_CHAR 00 nn indicates that we should exit
@@ -303,6 +327,7 @@ void terminal_mode(int check_for_exit, int pst_mode)
     int exitcode = 0;
     int continue_terminal = 1;
 
+    EnableVTMode();
     while (continue_terminal) {
         uint8_t buf[1];
         if (rx_timeout(buf, 1, 0) != SERIAL_TIMEOUT) {
