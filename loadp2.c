@@ -97,7 +97,7 @@ promptexit(int r)
 static void Usage(void)
 {
 printf("\
-loadp2 - a loader for the propeller 2 - version 0.029d 2019-11-09\n\
+loadp2 - a loader for the propeller 2 - version 0.030 2019-11-12\n\
 usage: loadp2\n\
          [ -p port ]               serial port\n\
          [ -b baud ]               user baud rate (default is %d)\n\
@@ -406,9 +406,16 @@ int loadfile(char *fname, int address)
     if (load_mode == LOAD_FPGA) {
         msleep(200);
     } else {
+        int retry;
         // receive checksum, verify it's "@@ "
         msleep(200);
-        num = rx_timeout((uint8_t *)buffer, 3, 400);
+        for (retry = 0; retry < 5; retry++) {
+            // send autobaud character
+            buffer[0] = 0x20;
+            tx((uint8_t *)buffer, 1);
+            num = rx_timeout((uint8_t *)buffer, 3, 200);
+            if (num == 3) break;
+        }
         if (num != 3) {
             printf("ERROR: timeout waiting for initial checksum: got %d\n", num);
             promptexit(1);

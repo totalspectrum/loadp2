@@ -1,6 +1,8 @@
 CON
 		tx_pin = 62
 		rx_pin = 63
+		dbg_pin = 56
+		
 		FLAGBIT_ZERO = $1		' if set, zero HUB memory
 		FLAGBIT_PATCHED = $2		' if set, clock frequency was patched into binary
   '' smart pin modes
@@ -26,15 +28,40 @@ zeroloop
 		djnz	pb, #zeroloop
 		rdfast	#0,#0			' wait for last byte to be written
 skipzero
+
+		mov	waitbit, ##9999
+restart
+''		drvnot	#dbg_pin
+''		waitx	##8_000_000
+		
 		'' set up uart smart pins
-		mov    pa, waitbit
-		or     pa, #7	' set for 8 bits
-		wrpin  ##_txmode, #tx_pin
-		wxpin  pa, #tx_pin
-		dirh   #tx_pin
-		wrpin  ##_rxmode, #rx_pin
-		wxpin  pa, #rx_pin
-		dirh   #rx_pin
+		'' we don't know for sure what the frequency is, so use
+		'' auto baud rate detection for this
+		dirl	#rx_pin
+		dirl	#tx_pin
+
+		call	#autobaud
+		mov     pa, waitbit	' autobaud set waitbit
+		shl	pa, #16
+		or      pa, #7	' set for 8 bits
+		wrpin   ##_txmode, #tx_pin
+		wxpin   pa, #tx_pin
+		dirh    #tx_pin
+		wrpin   ##_rxmode, #rx_pin
+		wxpin   pa, #rx_pin
+		dirh    #rx_pin
+
+		'' try to receive a space
+		'' if it works, autobaud is OK, otherwise re-try
+.space
+		testp	#rx_pin wc
+	if_nc	jmp	#.space
+		rdpin	rxbyte, #rx_pin
+		shr	rxbyte, #24
+		cmp	rxbyte, #$20 wz
+	if_nz	jmp	#restart
+	
+		drvh	#dbg_pin
 		
 		'' send 0 to host to indicate we are ready
 setup
@@ -115,6 +142,36 @@ ser_tx
 		testp	#tx_pin wc
 	if_nc	jmp	#.txflush
 		ret
+
+autobaud
+		dirl	#rx_pin
+		waitx	##1000
+		mov	mask, ##(1<<(rx_pin-32))
+		mov	port, #1
+
+    		test port, #1 wc	' set C to distinguish INA/OUTA
+    		test port, #2 wz    ' set Z (match on =)
+		
+                setpat mask, #0	' wait for pin lo (start bit)
+    		waitpat
+		setpat mask, mask	' wait for pin hi (first 1)
+		waitpat
+		getct a
+    		setpat mask, #0	' wait for pin lo again (following 0)
+    		waitpat
+    		getct b
+		setpat mask,mask	' wait for pin hi again (end of 0 sequence)
+		waitpat
+		getct waitbit
+
+		sub   waitbit, b
+		sub   b, a
+		fle   waitbit, b
+		mov   a, waitbit
+		shl   a, #3
+		waitx a
+		
+		ret
 		
 zeros
 		long	0
@@ -129,3 +186,8 @@ flagbits	res	1			'flag bits, see definitions above
 rxbyte		res	1			'received byte
 temp		res	1
 chksum		res	1
+mask		res	1
+port		res	1
+a		res	1
+b		res	1
+
