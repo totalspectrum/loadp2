@@ -64,14 +64,24 @@ setup
 		mov	chksum, #0
 		call	#send_chksum
 		
+		'' read file size
+		call	#ser_rx
+		mov	filesize, rxbyte
+		call	#ser_rx
+		shl	rxbyte, #8
+		or	filesize, rxbyte
+		call	#ser_rx
+		shl	rxbyte, #16
+		or	filesize, rxbyte
+		call	#ser_rx
+		shl	rxbyte, #24
+		or	filesize, rxbyte
+
 		wrfast	#0,address		'ready to write entire memory starting at address
 		nop		       		' give time to settle
 		
 .mainloop
-		testp	#rx_pin wc
-	if_nc	jmp	#.mainloop
-		rdpin	rxbyte, #rx_pin
-		shr	rxbyte, #24
+		call	#ser_rx
 		wfbyte	rxbyte			'write to hub
 		add	chksum, rxbyte
 
@@ -138,6 +148,13 @@ ser_tx
 		testp	#tx_pin wc
 	if_nc	jmp	#.txflush
 		ret
+
+' receive a byte from serial
+ser_rx
+		testp	#rx_pin wc
+	if_nc	jmp	#ser_rx
+		rdpin	rxbyte, #rx_pin
+	_ret_	shr	rxbyte, #24
 
 autobaud
 		dirl	#rx_pin

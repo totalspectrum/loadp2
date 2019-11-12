@@ -386,12 +386,7 @@ int loadfile(char *fname, int address)
     } else {
         txstring((uint8_t *)MainLoader1_bin, MainLoader1_bin_len);
     }
-    if (load_mode == LOAD_CHIP) {
-        txval(clock_mode);
-        txval(flag_bits());
-        txval(address);
-        txval(size);
-    } else {
+    if (load_mode == LOAD_FPGA) {
         // OLD FPGA loader
         txval(clock_mode);
         txval((3*clock_freq+loader_baud)/(loader_baud*2)-extra_cycles);
@@ -399,6 +394,11 @@ int loadfile(char *fname, int address)
         txval(size);
         txval(address);
         txval(flag_bits());
+    } else {
+        txval(clock_mode);
+        txval(flag_bits());
+        txval(address);
+        //txval(size); size will be sent later
     }
     tx((uint8_t *)"~", 1);
     if (load_mode == LOAD_FPGA) {
@@ -422,6 +422,12 @@ int loadfile(char *fname, int address)
             printf("ERROR: got incorrect initial chksum: %c%c%c\n", buffer[0], buffer[1], buffer[2]);
             promptexit(1);
         }
+        /* OK, now send the file size */
+        buffer[0] = (size >> 0) & 0xff;
+        buffer[1] = (size >> 8) & 0xff;
+        buffer[2] = (size >> 16) & 0xff;
+        buffer[3] = (size >> 24) & 0xff;
+        tx((uint8_t *)buffer, 4);
     }
     if (verbose) printf("Loading %s - %d bytes\n", fname, size);
     while ((num=loadBytes(buffer, 1024)))
