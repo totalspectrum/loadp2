@@ -6,8 +6,8 @@ CON
 		FLAGBIT_ZERO = $1		' if set, zero HUB memory
 		FLAGBIT_PATCHED = $2		' if set, clock frequency was patched into binary
   '' smart pin modes
-  _txmode       = %0000_0000_000_0000000000000_01_11110_0 'async tx mode, output enabled for smart output
-  _rxmode       = %0000_0000_000_0000000000000_00_11111_0 'async rx mode, input  enabled for smart input
+  ser_txmode       = %0000_0000_000_0000000000000_01_11110_0 'async tx mode, output enabled for smart output
+  ser_rxmode       = %0000_0000_000_0000000000000_00_11111_0 'async rx mode, input  enabled for smart input
 		
 DAT		org
 
@@ -44,10 +44,10 @@ restart
 		mov     pa, waitbit	' autobaud set waitbit
 		shl	pa, #16
 		or      pa, #7	' set for 8 bits
-		wrpin   ##_txmode, #tx_pin
+		wrpin   ##ser_txmode, #tx_pin
 		wxpin   pa, #tx_pin
 		dirh    #tx_pin
-		wrpin   ##_rxmode, #rx_pin
+		wrpin   ##ser_rxmode, #rx_pin
 		wxpin   pa, #rx_pin
 		dirh    #rx_pin
 
@@ -71,15 +71,15 @@ setup
 		wrfast	#0,address		'ready to write entire memory starting at address
 		nop		       		' give time to settle
 		
-mainloop
+.mainloop
 		testp	#rx_pin wc
-	if_nc	jmp	#mainloop
+	if_nc	jmp	#.mainloop
 		rdpin	rxbyte, #rx_pin
 		shr	rxbyte, #24
 		wfbyte	rxbyte			'write to hub
 		add	chksum, rxbyte
 
-		djnz	filesize,#mainloop	'loop until all bytes received
+		djnz	filesize,#.mainloop	'loop until all bytes received
 
                 rdfast  #0,#0                   'wait for last byte to be written
 
@@ -178,7 +178,6 @@ zeros
 		
 		orgf	$80
 clkmode_	res	1			'clock mode
-waitbit1_5	res	1			'1.5 bit cycles = 3*clock_freq/baud_rate/2 - 6
 waitbit		res	1			'1 bit cycles = clock_freq/baud_rate - 6
 filesize	res	1			'binary file size in bytes
 address		res	1			'starting address

@@ -393,7 +393,6 @@ int loadfile(char *fname, int address)
         unsigned long bit15_period = 0x10000 * (1.5 * clocks_per_bit);
         bit_period &= ~0x3FF;
         bit15_period &= ~0x3FF;
-        txval(bit15_period);
         txval(bit_period);
     } else {
         txval((3*clock_freq+loader_baud)/(loader_baud*2)-extra_cycles);
