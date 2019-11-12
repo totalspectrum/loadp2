@@ -29,11 +29,7 @@ zeroloop
 		rdfast	#0,#0			' wait for last byte to be written
 skipzero
 
-		mov	waitbit, ##9999
-restart
-''		drvnot	#dbg_pin
-''		waitx	##8_000_000
-		
+restart		
 		'' set up uart smart pins
 		'' we don't know for sure what the frequency is, so use
 		'' auto baud rate detection for this
@@ -175,13 +171,13 @@ autobaud
 		
 zeros
 		long	0
+waitbit		long	9999			'1 bit cycles = clock_freq/baud_rate - 6
 		
 		orgf	$80
 clkmode_	res	1			'clock mode
-waitbit		res	1			'1 bit cycles = clock_freq/baud_rate - 6
-filesize	res	1			'binary file size in bytes
-address		res	1			'starting address
 flagbits	res	1			'flag bits, see definitions above
+address		res	1			'starting address
+filesize	res	1			'binary file size in bytes
 rxbyte		res	1			'received byte
 temp		res	1
 chksum		res	1

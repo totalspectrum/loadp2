@@ -386,21 +386,20 @@ int loadfile(char *fname, int address)
     } else {
         txstring((uint8_t *)MainLoader1_bin, MainLoader1_bin_len);
     }
-    txval(clock_mode);
     if (load_mode == LOAD_CHIP) {
-        double clocks_per_bit = (double)clock_freq / (double)loader_baud;
-        unsigned long bit_period = 0x10000 * clocks_per_bit;
-        unsigned long bit15_period = 0x10000 * (1.5 * clocks_per_bit);
-        bit_period &= ~0x3FF;
-        bit15_period &= ~0x3FF;
-        txval(bit_period);
+        txval(clock_mode);
+        txval(flag_bits());
+        txval(address);
+        txval(size);
     } else {
+        // OLD FPGA loader
+        txval(clock_mode);
         txval((3*clock_freq+loader_baud)/(loader_baud*2)-extra_cycles);
         txval((clock_freq+loader_baud/2)/loader_baud-extra_cycles);
+        txval(size);
+        txval(address);
+        txval(flag_bits());
     }
-    txval(size);
-    txval(address);
-    txval(flag_bits());
     tx((uint8_t *)"~", 1);
     if (load_mode == LOAD_FPGA) {
         msleep(200);
