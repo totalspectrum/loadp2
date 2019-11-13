@@ -61,6 +61,11 @@ restart
 setup
 		mov	chksum, #0
 		call	#send_chksum
+
+read_file
+		'' read file address
+		call	#ser_rx_long
+		mov	address, rxlong
 		
 		'' read file size
 		call	#ser_rx_long

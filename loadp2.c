@@ -39,7 +39,6 @@
 #define LOAD_CHIP   0
 #define LOAD_FPGA   1
 #define LOAD_SINGLE 2
-#define LOAD_FLASH  3
 
 #if defined(__APPLE__)
 static int loader_baud = 921600;
@@ -118,12 +117,26 @@ usage: loadp2\n\
          [ -xTAQOZ ]               enter ROM version of TAQOZ\n\
          [ -CHIP ]                 set load mode for CHIP\n\
          [ -FPGA ]                 set load mode for FPGA\n\
-         [ -FLASH ]                copy program to SPI FLASH\n\
          [ -PATCH ]                patch in clock frequency and serial parms\n\
          [ -NOZERO ]               do not clear memory before download\n\
          [ -SINGLE ]               set load mode for single stage\n\
          file                      file to load\n", user_baud, loader_baud, clock_freq, clock_mode);
     promptexit(1);
+}
+
+void tx_raw_byte(unsigned int c)
+{
+    buffer[0] = c & 0xff;
+    tx((uint8_t *)buffer, 1);
+}
+
+void tx_raw_long(unsigned int size)
+{
+    buffer[0] = (size >> 0) & 0xff;
+    buffer[1] = (size >> 8) & 0xff;
+    buffer[2] = (size >> 16) & 0xff;
+    buffer[3] = (size >> 24) & 0xff;
+    tx((uint8_t *)buffer, 4);
 }
 
 void txbyte(int val)
@@ -169,7 +182,7 @@ int g_fileptr;
  * read an ELF file into memory
  */
 int
-loadElfFile(FILE *infile, ElfHdr *hdr)
+readElfFile(FILE *infile, ElfHdr *hdr)
 {
     ElfContext *c;
     ElfProgramHdr program;
@@ -242,7 +255,7 @@ loadElfFile(FILE *infile, ElfHdr *hdr)
  */
 
 int 
-loadBinaryFile(char *fname)
+readBinaryFile(char *fname)
 {
     int size;
     FILE *infile;
@@ -256,8 +269,8 @@ loadBinaryFile(char *fname)
         return -1;
     }
     if (ReadAndCheckElfHdr(infile, &hdr)) {
-        /* this is an ELF file, load using LoadElf instead */
-        return loadElfFile(infile, &hdr);
+        /* this is an ELF file, load using ReadElf instead */
+        return readElfFile(infile, &hdr);
     } else {
         //printf("not an ELF file\n");
     }
@@ -298,7 +311,7 @@ int loadfilesingle(char *fname)
     int totnum = 0;
     int checksum = 0;
 
-    size = loadBinaryFile(fname);
+    size = readBinaryFile(fname);
     if (size < 0) {
         return 1;
     }
@@ -356,33 +369,6 @@ int loadfilesingle(char *fname)
     if (verbose) printf("%s loaded\n", fname);
     return 0;
 }
-
-static void TrackFlashProgress()
-{
-    int stage = -1;
-    int oldstage = -1;
-    int num;
-    int c;
-    while (stage != 9) {
-        num = rx_timeout((uint8_t *)buffer, 1, 1000);
-        if (num != 1) {
-            printf("ERROR: timeout from flash programmer\n");
-            promptexit(1);
-        }
-        c = buffer[0];
-        if (c < '0' || c > '9') {
-            printf("ERROR: invalid flash status %02x\n", c);
-            promptexit(1);
-        }
-        stage = c - '0';
-        if (stage != oldstage) {
-            printf("Flash entering stage %d\n", stage);
-            oldstage = stage;
-        }
-    }
-    printf("Flash done\n");
-}
-
 static unsigned flag_bits()
 {
     // bit 0: zero out HUB memory
@@ -397,27 +383,25 @@ int loadfile(char *fname, int address)
     int patch = patch_mode;
     unsigned chksum = 0;
     
-    if (load_mode == LOAD_SINGLE)
+    if (load_mode == LOAD_SINGLE) {
+        if (address != 0) {
+            printf("ERROR: -SINGLE can only load at address 0\n");
+            promptexit(1);
+        }
         return loadfilesingle(fname);
-
-    size = loadBinaryFile(fname);
+    }
+    size = readBinaryFile(fname);
     if (size < 0)
     {
         printf("Could not open %s\n", fname);
         return 1;
     }
     if (verbose) {
-        if (load_mode == LOAD_FLASH) {
-            printf("Loading flash programmer...\n");
-        } else {
-            printf("Loading fast loader for %s...\n", (load_mode == LOAD_FPGA) ? "fpga" : "chip");
-        }
+        printf("Loading fast loader for %s...\n", (load_mode == LOAD_FPGA) ? "fpga" : "chip");
     }
     tx((uint8_t *)"> Prop_Hex 0 0 0 0", 18);
     if (load_mode == LOAD_FPGA) {
         txstring((uint8_t *)MainLoader_bin, MainLoader_bin_len);
-    } else if (load_mode == LOAD_FLASH) {
-        txstring((uint8_t *)Flash_loader_bin, Flash_loader_bin_len);
     } else {
         txstring((uint8_t *)MainLoader1_bin, MainLoader1_bin_len);
     }
@@ -429,11 +413,11 @@ int loadfile(char *fname, int address)
         txval(size);
         txval(address);
         txval(flag_bits());
-    } else if (load_mode == LOAD_CHIP) {
+    } else {
         txval(clock_mode);
         txval(flag_bits());
-        txval(address);
-        //txval(size); size will be sent later
+        //txval(address); // address will be sent later
+        //txval(size); // size will be sent later
     }
     tx((uint8_t *)"~", 1);
     if (load_mode == LOAD_FPGA) {
@@ -442,10 +426,10 @@ int loadfile(char *fname, int address)
         int retry;
         // receive checksum, verify it's "@@ "
         msleep(200);
+        tx_raw_byte(' ');
         for (retry = 0; retry < 5; retry++) {
             // send autobaud character
-            buffer[0] = 0x20;
-            tx((uint8_t *)buffer, 1);
+            tx_raw_byte(' ');
             num = rx_timeout((uint8_t *)buffer, 3, 200);
             if (num == 3) break;
         }
@@ -457,12 +441,10 @@ int loadfile(char *fname, int address)
             printf("ERROR: got incorrect initial chksum: %c%c%c (%02x %02x %02x)\n", buffer[0], buffer[1], buffer[2], buffer[0], buffer[1], buffer[2]);
             promptexit(1);
         }
-        /* OK, now send the file size */
-        buffer[0] = (size >> 0) & 0xff;
-        buffer[1] = (size >> 8) & 0xff;
-        buffer[2] = (size >> 16) & 0xff;
-        buffer[3] = (size >> 24) & 0xff;
-        tx((uint8_t *)buffer, 4);
+        /* OK, now send the address and file size */
+        if (verbose) printf("Sending header\n");
+        tx_raw_long(address);
+        tx_raw_long(size);
     }
     if (verbose) printf("Loading %s - %d bytes\n", fname, size);
     while ((num=loadBytes(buffer, 1024)))
@@ -498,15 +480,12 @@ int loadfile(char *fname, int address)
             promptexit(1);
         }
         if (verbose) printf("chksum: %x OK\n", recv_chksum);
+        tx_raw_byte('-'); /* send start command */
     } else {
         wait_drain();
     }
     msleep(100);
     if (verbose) printf("%s loaded\n", fname);
-    if (load_mode == LOAD_FLASH) {
-        // now report status from chip
-        TrackFlashProgress();
-    }
     return 0;
 }
 
@@ -560,12 +539,6 @@ checkp2_and_init(char *Port, int baudrate)
                 {
                     printf("Warning: Unknown version %c, assuming CHIP\n", buffer[11]);
                     load_mode = LOAD_CHIP;
-                }
-            }
-            if (load_mode == LOAD_FLASH) {
-                if (buffer[11] == 'A') {
-                    printf("ERROR: flash programming not supported on Rev A boards\n");
-                    promptexit(1);
                 }
             }
             return 1;
@@ -756,8 +729,6 @@ int main(int argc, char **argv)
                 load_mode = LOAD_CHIP;
             else if (!strcmp(argv[i], "-FPGA"))
                 load_mode = LOAD_FPGA;
-            else if (!strcmp(argv[i], "-FLASH"))
-                load_mode = LOAD_FLASH;
             else if (!strcmp(argv[i], "-SINGLE"))
                 load_mode = LOAD_SINGLE;
             else if (!strcmp(argv[i], "-NOZERO"))
