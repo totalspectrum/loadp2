@@ -375,6 +375,56 @@ static unsigned flag_bits()
     return force_zero | (patch_mode << 1);
 }
 
+int loadfileFPGA(char *fname, int address)
+{
+    int num, size;
+    int totnum = 0;
+    int patch = patch_mode;
+    unsigned chksum = 0;
+
+    size = readBinaryFile(fname);
+    if (size < 0)
+    {
+        printf("Could not open %s\n", fname);
+        return 1;
+    }
+    if (verbose) {
+        printf("Loading fast loader for %s...\n", (load_mode == LOAD_FPGA) ? "fpga" : "chip");
+    }
+    tx((uint8_t *)"> Prop_Hex 0 0 0 0", 18);
+    txstring((uint8_t *)MainLoader_bin, MainLoader_bin_len);
+    // OLD FPGA loader
+    txval(clock_mode);
+    txval((3*clock_freq+loader_baud)/(loader_baud*2)-extra_cycles);
+    txval((clock_freq+loader_baud/2)/loader_baud-extra_cycles);
+    txval(size);
+    txval(address);
+    txval(flag_bits());
+    tx((uint8_t *)"~", 1);
+    msleep(200);
+    if (verbose) printf("Loading %s - %d bytes\n", fname, size);
+    while ((num=loadBytes(buffer, 1024)))
+    {
+        int i;
+        if (patch)
+        {
+            patch = 0;
+            memcpy(&buffer[0x14], &clock_freq, 4);
+            memcpy(&buffer[0x18], &clock_mode, 4);
+            memcpy(&buffer[0x1c], &user_baud, 4);
+        }
+        tx((uint8_t *)buffer, num);
+        totnum += num;
+        for (i = 0; i < num; i++) {
+            chksum += buffer[i];
+        }
+    }
+    wait_drain();
+    msleep(100);
+    if (verbose) printf("%s loaded\n", fname);
+    return 0;
+}
+
 int loadfile(char *fname, int address)
 {
     int num, size;
@@ -389,39 +439,20 @@ int loadfile(char *fname, int address)
         }
         return loadfilesingle(fname);
     }
-    size = readBinaryFile(fname);
-    if (size < 0)
-    {
-        printf("Could not open %s\n", fname);
-        return 1;
+    if (load_mode == LOAD_FPGA) {
+        return loadfileFPGA(fname, address);
     }
+    
     if (verbose) {
         printf("Loading fast loader for %s...\n", (load_mode == LOAD_FPGA) ? "fpga" : "chip");
     }
     tx((uint8_t *)"> Prop_Hex 0 0 0 0", 18);
-    if (load_mode == LOAD_FPGA) {
-        txstring((uint8_t *)MainLoader_bin, MainLoader_bin_len);
-    } else {
-        txstring((uint8_t *)MainLoader1_bin, MainLoader1_bin_len);
-    }
-    if (load_mode == LOAD_FPGA) {
-        // OLD FPGA loader
-        txval(clock_mode);
-        txval((3*clock_freq+loader_baud)/(loader_baud*2)-extra_cycles);
-        txval((clock_freq+loader_baud/2)/loader_baud-extra_cycles);
-        txval(size);
-        txval(address);
-        txval(flag_bits());
-    } else {
-        txval(clock_mode);
-        txval(flag_bits());
-        //txval(address); // address will be sent later
-        //txval(size); // size will be sent later
-    }
+    txstring((uint8_t *)MainLoader1_bin, MainLoader1_bin_len);
+    txval(clock_mode);
+    txval(flag_bits());
     tx((uint8_t *)"~", 1);
-    if (load_mode == LOAD_FPGA) {
-        msleep(200);
-    } else {
+    
+    {
         int retry;
         // receive checksum, verify it's "@@ "
         msleep(200);
@@ -440,11 +471,20 @@ int loadfile(char *fname, int address)
             printf("ERROR: got incorrect initial chksum: %c%c%c (%02x %02x %02x)\n", buffer[0], buffer[1], buffer[2], buffer[0], buffer[1], buffer[2]);
             promptexit(1);
         }
-        /* OK, now send the address and file size */
-        if (verbose) printf("Sending header\n");
-        tx_raw_long(address);
-        tx_raw_long(size);
     }
+
+    size = readBinaryFile(fname);
+    if (size < 0)
+    {
+        printf("Could not open %s\n", fname);
+        return 1;
+    }
+
+    /* OK, now send the address and file size */
+    if (verbose) printf("Sending header\n");
+    tx_raw_long(address);
+    tx_raw_long(size);
+
     if (verbose) printf("Loading %s - %d bytes\n", fname, size);
     while ((num=loadBytes(buffer, 1024)))
     {
@@ -463,26 +503,22 @@ int loadfile(char *fname, int address)
         }
     }
     // receive checksum, verify it
-    if (load_mode != LOAD_FPGA) {
-        int recv_chksum = 0;
-        wait_drain();
-        num = rx_timeout((uint8_t *)buffer, 3, 400);
-        if (num != 3) {
-            printf("ERROR: timeout waiting for checksum at end: got %d\n", num);
-            promptexit(1);
-        }
-        recv_chksum = (buffer[0] - '@') << 4;
-        recv_chksum += (buffer[1] - '@');
-        chksum &= 0xff;
-        if (recv_chksum != (chksum & 0xff)) {
-            printf("ERROR: bad checksum, expected %02x got %02x (chksum characters %c%c%c)\n", chksum, recv_chksum, buffer[0], buffer[1], buffer[2]);
-            promptexit(1);
-        }
-        if (verbose) printf("chksum: %x OK\n", recv_chksum);
-        tx_raw_byte('-'); /* send start command */
-    } else {
-        wait_drain();
+    int recv_chksum = 0;
+    wait_drain();
+    num = rx_timeout((uint8_t *)buffer, 3, 400);
+    if (num != 3) {
+        printf("ERROR: timeout waiting for checksum at end: got %d\n", num);
+        return 1;
     }
+    recv_chksum = (buffer[0] - '@') << 4;
+    recv_chksum += (buffer[1] - '@');
+    chksum &= 0xff;
+    if (recv_chksum != (chksum & 0xff)) {
+        printf("ERROR: bad checksum, expected %02x got %02x (chksum characters %c%c%c)\n", chksum, recv_chksum, buffer[0], buffer[1], buffer[2]);
+        promptexit(1);
+    }
+    if (verbose) printf("chksum: %x OK\n", recv_chksum);
+    tx_raw_byte('-'); /* send start command */
     msleep(100);
     if (verbose) printf("%s loaded\n", fname);
     return 0;
