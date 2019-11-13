@@ -85,6 +85,12 @@ read_file
 		'' respond to host
 		call	#send_chksum
 
+		'' check host response
+		'' if they send "+" then look for another file
+		call	 #ser_rx
+		cmp	 rxbyte, #"+" wz
+	if_z	jmp	 #read_file
+	
 		waitx	##80_000_000/10		' short pause to ensure sync
 		
 		'' shut down smart pins
