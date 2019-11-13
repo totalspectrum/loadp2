@@ -63,18 +63,8 @@ setup
 		call	#send_chksum
 		
 		'' read file size
-		call	#ser_rx
-		mov	filesize, rxbyte
-		call	#ser_rx
-		shl	rxbyte, #8
-		or	filesize, rxbyte
-		call	#ser_rx
-		shl	rxbyte, #16
-		or	filesize, rxbyte
-		call	#ser_rx
-		shl	rxbyte, #24
-		or	filesize, rxbyte
-
+		call	#ser_rx_long
+		mov	filesize, rxlong
 		wrfast	#0,address		'ready to write entire memory starting at address
 		nop		       		' give time to settle
 		
@@ -89,21 +79,6 @@ setup
 
 		'' respond to host
 		call	#send_chksum
-
-#ifdef NEVER
-.done
-		'' verify memory
-		mov	chksum, #0
-		mov	filesize, ##$8000
-		mov	ptra, address
-.again
-		rdbyte	rxbyte, ptra++
-		add	chksum, rxbyte
-		djnz	filesize, #.again
-		call	#send_chksum
-		waitx	##80_000_000
-		jmp	#.done
-#endif
 
 		waitx	##80_000_000/10		' short pause to ensure sync
 		
@@ -154,6 +129,24 @@ ser_rx
 		rdpin	rxbyte, #rx_pin
 	_ret_	shr	rxbyte, #24
 
+' receive a long from serial
+ser_rx_long
+  	    	call	#ser_rx
+		mov	rxlong, rxbyte
+		call	#ser_rx
+		shl	rxbyte, #8
+		or	rxlong, rxbyte
+		call	#ser_rx
+		shl	rxbyte, #16
+		or	rxlong, rxbyte
+		call	#ser_rx
+		shl	rxbyte, #24
+	_ret_	or	rxlong, rxbyte
+
+' automatically detect baud rate
+' based on length of shortest 1 or 0
+' we see next
+
 autobaud
 		dirl	#rx_pin
 		waitx	##1000
@@ -193,7 +186,9 @@ clkmode_	res	1			'clock mode
 flagbits	res	1			'flag bits, see definitions above
 address		res	1			'starting address
 filesize	res	1			'binary file size in bytes
+count		res	1
 rxbyte		res	1			'received byte
+rxlong		res	1			'received longword
 temp		res	1
 chksum		res	1
 mask		res	1
