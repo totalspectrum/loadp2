@@ -45,7 +45,7 @@ PASM=fastspin -2
 
 default: $(BUILD)/loadp2$(EXT)
 
-HEADERS=MainLoader.h MainLoader1.h
+HEADERS=MainLoader.h MainLoader1.h Flash_loader.h
 
 $(BUILD)/loadp2$(EXT): $(BUILD) loadp2.c loadelf.c loadelf.h osint_linux.c osint_mingw.c $(HEADERS)
 	$(CC) -Wall -O $(DEFS) -o $@ loadp2.c loadelf.c $(OSFILE)

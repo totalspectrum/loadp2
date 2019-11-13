@@ -57,8 +57,6 @@ restart
 		cmp	rxbyte, #$20 wz
 	if_nz	jmp	#restart
 	
-		drvh	#dbg_pin
-		
 		'' send 0 to host to indicate we are ready
 setup
 		mov	chksum, #0
