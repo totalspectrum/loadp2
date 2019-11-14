@@ -16,7 +16,7 @@ begin		hubset	clkmode_			'set up oscillator
                 or      clkmode_, #3             'enable XI+PLL mode
                 hubset  clkmode_                 'enable oscillator
 		test	flagbits, #FLAGBIT_ZERO wz
-	if_nz	jmp	#skipzero
+	if_z	jmp	#skipzero
 		'' zero out memory
 		wrfast	#0,0
 		mov	pb, ##$7c0000/16
@@ -63,14 +63,19 @@ setup
 		call	#send_chksum
 
 read_file
+		mov	chksum, #0
 		'' read file address
 		call	#ser_rx_long
-		mov	address, rxlong
-		
+		mov	loadaddr, rxlong
+
+		'' if first time through, set starting address
+		cmp	startaddr, ##-1 wz
+	if_z	mov	startaddr, loadaddr
+	
 		'' read file size
 		call	#ser_rx_long
 		mov	filesize, rxlong
-		wrfast	#0,address		'ready to write entire memory starting at address
+		wrfast	#0,loadaddr		'ready to write entire memory starting at address
 		nop		       		' give time to settle
 		
 .mainloop
@@ -109,7 +114,7 @@ read_file
 		hubset	 #0
 start_cog
 		waitx	 ##25_000_000/10
-		coginit	#0,address		'launch cog 0 from address
+		coginit	#0,startaddr		'launch cog 0 from starting address
 
 send_chksum
 		mov	temp, chksum
@@ -122,8 +127,7 @@ send_chksum
 		add	temp, #"@"
 		call	#ser_tx
 		mov	temp, #" "
-		call	#ser_tx
-		ret
+		jmp	#ser_tx
 		
 ser_tx
 		wypin	temp, #tx_pin
@@ -190,12 +194,13 @@ autobaud
 		
 zeros
 		long	0
-waitbit		long	9999			'1 bit cycles = clock_freq/baud_rate - 6
-		
-		orgf	$80
+startaddr	long	-1			'starting address
+waitbit		long	99999
+
+		orgf	$100
 clkmode_	res	1			'clock mode
 flagbits	res	1			'flag bits, see definitions above
-address		res	1			'starting address
+loadaddr	res	1			'address for load
 filesize	res	1			'binary file size in bytes
 count		res	1
 rxbyte		res	1			'received byte

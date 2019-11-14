@@ -77,6 +77,19 @@ static int waitAtExit = 0;
 static int force_zero = 1;  /* default to zeroing memory */
 static int do_hwreset = 1;
 
+/* duplicate a string, useful if our original string might
+ * not be modifiable
+ */
+static char *duplicate_string(const char *str)
+{
+    size_t len = strlen(str)+1;
+    char *r = malloc(len);
+    if (r) {
+        strcpy(r, str);
+    }
+    return r;
+}
+
 /* promptexit: print a prompt if waitAtExit is set, then exit */
 void
 promptexit(int r)
@@ -109,7 +122,7 @@ usage: loadp2\n\
          [ -T ]                    enter PST-compatible terminal mode\n\
          [ -v ]                    enable verbose mode\n\
          [ -k ]                    wait for user input before exit\n\
-         [ -q ]                    quiet mode: also checks for magic escape sequence\n\
+         [ -q ]                    quiet mode: also checks for exit sequence\n\
          [ -n ]                    no reset; skip any hardware reset\n\
          [ -? ]                    display a usage message and exit\n\
          [ -xDEBUG ]               enter ROM debug monitor\n\
@@ -119,8 +132,22 @@ usage: loadp2\n\
          [ -PATCH ]                patch in clock frequency and serial parms\n\
          [ -NOZERO ]               do not clear memory before download\n\
          [ -SINGLE ]               set load mode for single stage\n\
-         file                      file to load\n", user_baud, loader_baud, clock_freq, clock_mode);
-    promptexit(1);
+         filespec                  file to load\n\
+", user_baud, loader_baud, clock_freq, clock_mode);
+printf("\n\
+In -CHIP mode, filespec may optionally be multiple files with address\n\
+specifiers, such as:\n\
+    @ADDR=file1,@ADDR=file2,@ADDR+file3\n\
+Here ADDR is a hex address at which to load the next file, followed by = or +\n\
+If it is followed by + then the size of the file is put in memory followed by\n\
+the file data. This feature is useful for loading data that a program wishes\n\
+to act on. For example, a VGA program which displays data from $1000 may be\n\
+loaded with:\n\
+    @0=vgacode.bin,@1000=picture.bmp\n\
+The main executable code must always be specified first\n\
+");
+
+promptexit(1);
 }
 
 void tx_raw_byte(unsigned int c)
@@ -425,12 +452,41 @@ int loadfileFPGA(char *fname, int address)
     return 0;
 }
 
+static char *getNextFile(char *fname, char **next_p, int *address_p)
+{
+    int address = *address_p;
+    char *next = fname;
+
+    if (!*fname) {
+        return NULL;
+    }
+    if (*fname == '@') {
+        address = strtoul(fname+1, &next, 16);
+        if (*next == '=')
+            next++;
+    }
+
+    // scan ahead to start of next fname
+    while (*fname && *fname != ',') {
+        fname++;
+    }
+    if (*fname) {
+        *fname++ = 0;
+    }
+    
+    *address_p = address;
+    *next_p = next;
+    return fname;
+}
+
 int loadfile(char *fname, int address)
 {
     int num, size;
     int totnum = 0;
     int patch = patch_mode;
-    unsigned chksum = 0;
+    unsigned chksum;
+    char *next_fname = NULL;
+    int send_size;
     
     if (load_mode == LOAD_SINGLE) {
         if (address != 0) {
@@ -473,54 +529,87 @@ int loadfile(char *fname, int address)
         }
     }
 
-    size = readBinaryFile(fname);
-    if (size < 0)
-    {
-        printf("Could not open %s\n", fname);
-        return 1;
-    }
+    // we want to be able to insert 0 characters in fname
+    fname = duplicate_string(fname);
+    
+    do {
+        fname = getNextFile(fname, &next_fname, &address);
+        if (!next_fname) break; /* no more files */
 
-    /* OK, now send the address and file size */
-    if (verbose) printf("Sending header\n");
-    tx_raw_long(address);
-    tx_raw_long(size);
-
-    if (verbose) printf("Loading %s - %d bytes\n", fname, size);
-    while ((num=loadBytes(buffer, 1024)))
-    {
-        int i;
-        if (patch)
+        if (*next_fname == '+') {
+            next_fname++;
+            send_size = 1;
+        } else {
+            send_size = 0;
+        }
+        size = readBinaryFile(next_fname);
+        if (size < 0)
         {
-            patch = 0;
-            memcpy(&buffer[0x14], &clock_freq, 4);
-            memcpy(&buffer[0x18], &clock_mode, 4);
-            memcpy(&buffer[0x1c], &user_baud, 4);
+            printf("Could not open %s\n", fname);
+            return 1;
         }
-        tx((uint8_t *)buffer, num);
-        totnum += num;
-        for (i = 0; i < num; i++) {
-            chksum += buffer[i];
+
+        /* OK, now send the address and file size */
+        if (verbose) printf("Sending header\n");
+        tx_raw_long(address);
+        if (send_size) {
+            int effective_size = size + 4;
+            // prefix the file data with 4 bytes of size
+            tx_raw_long(effective_size);
+            address += effective_size;
+            tx_raw_long(size);
+            // initialize the checksum to the data we just sent
+            chksum = size & 0xff;
+            chksum += (size>>8) & 0xff;
+            chksum += (size>>16) & 0xff;
+            chksum += (size>>24) & 0xff;
+        } else {
+            tx_raw_long(size);
+            address += size;
+            chksum = 0;
         }
-    }
-    // receive checksum, verify it
-    int recv_chksum = 0;
-    wait_drain();
-    num = rx_timeout((uint8_t *)buffer, 3, 400);
-    if (num != 3) {
-        printf("ERROR: timeout waiting for checksum at end: got %d\n", num);
-        return 1;
-    }
-    recv_chksum = (buffer[0] - '@') << 4;
-    recv_chksum += (buffer[1] - '@');
-    chksum &= 0xff;
-    if (recv_chksum != (chksum & 0xff)) {
-        printf("ERROR: bad checksum, expected %02x got %02x (chksum characters %c%c%c)\n", chksum, recv_chksum, buffer[0], buffer[1], buffer[2]);
-        promptexit(1);
-    }
-    if (verbose) printf("chksum: %x OK\n", recv_chksum);
-    tx_raw_byte('-'); /* send start command */
+
+        if (verbose) printf("Loading %s - %d bytes\n", next_fname, size);
+        while ((num=loadBytes(buffer, 1024)))
+        {
+            int i;
+            if (patch)
+            {
+                patch = 0;
+                memcpy(&buffer[0x14], &clock_freq, 4);
+                memcpy(&buffer[0x18], &clock_mode, 4);
+                memcpy(&buffer[0x1c], &user_baud, 4);
+            }
+            tx((uint8_t *)buffer, num);
+            totnum += num;
+            for (i = 0; i < num; i++) {
+                chksum += buffer[i];
+            }
+        }
+        // receive checksum, verify it
+        int recv_chksum = 0;
+        wait_drain();
+        num = rx_timeout((uint8_t *)buffer, 3, 400);
+        if (num != 3) {
+            printf("ERROR: timeout waiting for checksum at end: got %d\n", num);
+            return 1;
+        }
+        recv_chksum = (buffer[0] - '@') << 4;
+        recv_chksum += (buffer[1] - '@');
+        chksum &= 0xff;
+        if (recv_chksum != (chksum & 0xff)) {
+            printf("ERROR: bad checksum, expected %02x got %02x (chksum characters %c%c%c)\n", chksum, recv_chksum, buffer[0], buffer[1], buffer[2]);
+            promptexit(1);
+        }
+        if (verbose) printf("chksum: %x OK\n", recv_chksum);
+        if (*fname) {
+            // more files to send
+            tx_raw_byte('+');
+        } else {
+            tx_raw_byte('-');
+        }
+    } while (*fname);
     msleep(100);
-    if (verbose) printf("%s loaded\n", fname);
     return 0;
 }
 
