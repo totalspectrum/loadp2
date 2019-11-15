@@ -26,6 +26,11 @@ else ifeq ($(CROSS),linux32)
   EXT=
   BUILD=./build-linux32
   OSFILE=osint_linux.c
+else ifeq ($(CROSS),macosx)
+  CC=o64-clang -DMACOSX
+  EXT=
+  BUILD=./build-macosx
+  OSFILE=osint_linux.c
 else
   CC=gcc
   EXT=
