@@ -51,7 +51,7 @@ static int clock_freq = 80000000;
 static int extra_cycles = 7;
 static int load_mode = -1;
 static int patch_mode = 0;
-static int use_checksum = 1;
+static int use_checksum = 0; // 1 seems to fail on MACOSX, not sure why
 static int quiet_mode = 0;
 static int enter_rom = NO_ENTER;
 
@@ -113,7 +113,7 @@ promptexit(int r)
 static void Usage(void)
 {
 printf("\
-loadp2 - a loader for the propeller 2 - version 0.030-beta 2019-11-13\n\
+loadp2 - a loader for the propeller 2 - version 0.030 2019-11-16\n\
 usage: loadp2\n\
          [ -p port ]               serial port\n\
          [ -b baud ]               user baud rate (default is %d)\n\
