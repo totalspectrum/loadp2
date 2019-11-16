@@ -86,13 +86,12 @@ static void sigint_handler(int signum)
     exit(1);
 }
 
-
+#if !defined(MACOSX)
+// MACOSX uses a different method to set baud
 static int set_baud(struct termios *sparm, unsigned long baud)
 {
     int tbaud = 0;
-#ifdef MACOSX
-    speed_t speed = 0;
-#endif
+
     switch(baud) {
         case 0: // default
             tbaud = B115200;
@@ -143,15 +142,6 @@ static int set_baud(struct termios *sparm, unsigned long baud)
             tbaud = B9600;
             break;
         default:
-#ifdef MACOSX
-            // use IOCTL call to set other baud rates
-            speed = (speed_t)baud;
-            if (ioctl(hSerial, IOSSIOSPEED, &speed) == 0) // if IOCTL succeeds continue
-            {
-                chk("tcflush", tcflush(hSerial, TCIFLUSH));
-                return 1;
-            }
-#endif
             tbaud = baud;
             printf("Unsupported baudrate %lu. Use ", baud);
 #ifdef B921600
@@ -174,16 +164,13 @@ static int set_baud(struct termios *sparm, unsigned long baud)
             exit(2);
             break;
     }
-    
+
     /* set raw input */
-#ifdef MACOSX
-    chk("cfsetspeed", cfsetspeed(sparm, tbaud));
-#else
     chk("cfsetispeed", cfsetispeed(sparm, tbaud));
     chk("cfsetospeed", cfsetospeed(sparm, tbaud));
-#endif
     return 1;
 }
+#endif /* !MACOSX */
 
 /**
  * open serial port
@@ -197,6 +184,8 @@ int serial_init(const char* port, unsigned long baud)
 
     /* open the port */
 #if defined(MACOSX)
+    speed_t speed = (speed_t) baud;
+
     hSerial = open(port, O_RDWR | O_NOCTTY | O_NONBLOCK);
 #else
     hSerial = open(port, O_RDWR | O_NOCTTY | O_NDELAY | O_NONBLOCK);
@@ -208,19 +197,7 @@ int serial_init(const char* port, unsigned long baud)
     last_baud = baud;
     strncpy(last_port, port, PATH_MAX-1);
     
-    signal(SIGINT, sigint_handler);
-
-#ifdef NEVER
-    /* set the terminal to exclusive mode */
-    /* this actually doesn't work because we need to re-open it to
-       change baud */
-    if (ioctl(hSerial, TIOCEXCL) != 0) {
-        //printf("error: can't open terminal for exclusive access\n");
-        close(hSerial);
-        return 0;
-    }
-#endif
-    
+    signal(SIGINT, sigint_handler);    
     fcntl(hSerial, F_SETFL, 0);
     
     /* get the current options */
@@ -229,18 +206,29 @@ int serial_init(const char* port, unsigned long baud)
     
     /* set raw input */
     cfmakeraw(&sparm);
-#ifdef MACOSX    
     sparm.c_cc[VTIME] = 0;
     sparm.c_cc[VMIN] = 1;
-#endif    
+
+#if !defined(MACOSX)    
     if (!set_baud(&sparm, baud)) {
         close(hSerial);
+        printf("failure setting baud %ld\n", (long)baud);
         return 0;
     }
-
+#endif
+    
     /* set the options */
-    chk("tcflush", tcflush(hSerial, TCIFLUSH));
     chk("tcsetattr", tcsetattr(hSerial, TCSANOW, &sparm));
+
+#ifdef MACOSX
+    if (ioctl(hSerial, IOSSIOSPEED, &speed) != 0)
+    {
+        close(hSerial);
+        printf("failure setting speed %ld\n", (long)baud);
+        return 0;
+    }
+#endif    
+    chk("tcflush", tcflush(hSerial, TCIFLUSH));
     
     return 1;
 }
