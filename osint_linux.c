@@ -80,30 +80,6 @@ int get_loader_baud(int ubaud, int lbaud)
     return lbaud;
 }
 
-int serial_find(const char* prefix, int (*check)(const char* port, void* data), void* data)
-{
-    char path[PATH_MAX];
-    int prefixlen = strlen(prefix);
-    struct dirent *entry;
-    DIR *dirp;
-    
-    if (!(dirp = opendir("/dev")))
-        return -1;
-    
-    while ((entry = readdir(dirp)) != NULL) {
-        if (strncmp(entry->d_name, prefix, prefixlen) == 0) {
-            sprintf(path, "/dev/%s", entry->d_name);
-            if ((*check)(path, data) == 0) {
-                closedir(dirp);
-                return 0;
-            }
-        }
-    }
-    
-    closedir(dirp);
-    return -1;
-}
-
 static void sigint_handler(int signum)
 {
     serial_done();
@@ -252,18 +228,11 @@ int serial_init(const char* port, unsigned long baud)
     sparm = old_sparm;
     
     /* set raw input */
-#ifdef MACOSX    
     cfmakeraw(&sparm);
+#ifdef MACOSX    
     sparm.c_cc[VTIME] = 0;
     sparm.c_cc[VMIN] = 1;
-#else
-    memset(&sparm, 0, sizeof(sparm));
-    sparm.c_cflag = CS8 | CLOCAL | CREAD;
-    sparm.c_iflag = IGNPAR | IGNBRK;
-    sparm.c_cc[VTIME] = 0;
-    sparm.c_cc[VMIN] = 1;
-#endif
-    
+#endif    
     if (!set_baud(&sparm, baud)) {
         close(hSerial);
         return 0;

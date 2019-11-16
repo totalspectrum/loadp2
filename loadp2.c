@@ -40,7 +40,7 @@
 #define LOAD_FPGA   1
 #define LOAD_SINGLE 2
 
-#if defined(__APPLE__)
+#if defined(MACOSX)
 static int loader_baud = 921600;
 #else
 static int loader_baud = 2000000;
@@ -59,10 +59,13 @@ int get_loader_baud(int ubaud, int lbaud);
 
 #if defined(__CYGWIN__) || defined(__MINGW32__) || defined(__MINGW64__)
   #define PORT_PREFIX "com"
-#elif defined(__APPLE__)
-  #define PORT_PREFIX "/dev/cu.usbserial"
+  #define INTEGER_PREFIXES
+#elif defined(MACOSX)
+  #define PORT_PREFIX "cu.usbserial"
+  #include <dirent.h>
 #else
-  #define PORT_PREFIX "/dev/ttyUSB"
+  #define PORT_PREFIX "ttyUSB"
+  #include <dirent.h>
 #endif
 
 #include "MainLoader.h"
@@ -674,13 +677,12 @@ checkp2_and_init(char *Port, int baudrate)
 }
     
 // look for a p2
-// returns delay to use for it after reset
 int findp2(char *portprefix, int baudrate)
 {
+    char Port[1024];
+#ifdef INTEGER_PREFIXES    
     int i;
     
-    char Port[100];
-
     if (verbose) printf("Searching serial ports for a P2\n");
     for (i = 0; i < 20; i++)
     {
@@ -690,6 +692,31 @@ int findp2(char *portprefix, int baudrate)
             return 1;
         }
     }
+#else
+    DIR *dir;
+    struct dirent *entry;
+    size_t prefixlen = strlen(portprefix);
+
+    dir = opendir("/dev");
+    if (!dir) {
+        printf("Unable to access /dev\n");
+        promptexit(1);
+    }
+    for(;;) {
+        entry = readdir(dir);
+        if (!entry) break;
+        if (0 != strncmp(entry->d_name, portprefix, prefixlen)) {
+            continue;
+        }
+        strcpy(Port, "/dev/");
+        strcat(Port, entry->d_name);
+        if (checkp2_and_init(Port, baudrate)) {
+            closedir(dir);
+            return 1;
+        }
+    }
+    closedir(dir);
+#endif
     return 0;
 }
 
