@@ -549,7 +549,7 @@ int loadfile(char *fname, int address)
         size = readBinaryFile(next_fname);
         if (size < 0)
         {
-            printf("Could not open %s\n", fname);
+            printf("Could not open %s\n", next_fname);
             return 1;
         }
 
@@ -638,15 +638,15 @@ checkp2_and_init(char *Port, int baudrate)
     hwreset();
     if (verbose) printf("trying %s...\n", Port);
 
-    for (i = 0; i < 10; i++) {
+    for (i = 0; i < 100; i++) {
         flush_input();
         tx((uint8_t *)"> Prop_Chk 0 0 0 0  ", 20);
-        msleep(20);
-        num = rx_timeout((uint8_t *)buffer, 20, 300);
+        msleep(10);
+        num = rx_timeout((uint8_t *)buffer, 20, 20);
         if (num >= 0) buffer[num] = 0;
         else {
             buffer[0] = 0;
-            if (verbose) printf("  timeout\n");
+            if (0 && verbose) printf("  timeout\n");
         }
         if (!strncmp(buffer, "\r\nProp_Ver ", 11))
         {
