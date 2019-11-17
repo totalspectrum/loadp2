@@ -113,7 +113,7 @@ promptexit(int r)
 static void Usage(void)
 {
 printf("\
-loadp2 - a loader for the propeller 2 - version 0.030 2019-11-16\n\
+loadp2 - a loader for the propeller 2 - version 0.030b 2019-11-17\n\
 usage: loadp2\n\
          [ -p port ]               serial port\n\
          [ -b baud ]               user baud rate (default is %d)\n\
@@ -514,11 +514,12 @@ int loadfile(char *fname, int address)
     {
         int retry;
         // receive checksum, verify it's "@@ "
-        msleep(200);
+        msleep(50);
         tx_raw_byte(' ');
         for (retry = 0; retry < 5; retry++) {
             // send autobaud character
             tx_raw_byte(' ');
+            msleep(10);
             num = rx_timeout((uint8_t *)buffer, 3, 200);
             if (num == 3) break;
         }
@@ -637,11 +638,11 @@ checkp2_and_init(char *Port, int baudrate)
     hwreset();
     if (verbose) printf("trying %s...\n", Port);
 
-    for (i = 0; i < 5; i++) {
+    for (i = 0; i < 10; i++) {
         flush_input();
         tx((uint8_t *)"> Prop_Chk 0 0 0 0  ", 20);
         msleep(20);
-        num = rx_timeout((uint8_t *)buffer, 20, 10);
+        num = rx_timeout((uint8_t *)buffer, 20, 300);
         if (num >= 0) buffer[num] = 0;
         else {
             buffer[0] = 0;
