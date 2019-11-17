@@ -113,7 +113,7 @@ promptexit(int r)
 static void Usage(void)
 {
 printf("\
-loadp2 - a loader for the propeller 2 - version 0.030b 2019-11-17\n\
+loadp2 - a loader for the propeller 2 - version 0.031 2019-11-17\n\
 usage: loadp2\n\
          [ -p port ]               serial port\n\
          [ -b baud ]               user baud rate (default is %d)\n\

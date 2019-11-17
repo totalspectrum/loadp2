@@ -1,0 +1,406 @@
+{
+Prop2 Flash loader
+Version 1.2 17th January 2019 - ozpropdev
+18 Oct 2019   Reengineered the programming bitbashing to resolve an issue that turned out to be a faulty board - Evan H
+31 Oct 2019   Modified to use dual smartpins for block reads with DualSPI signalling
+17 Nov 2019   Modified to load source program length and then data from $1000
+  This allows use with loadp2 via:
+     loadp2 @0=P2ES_flashloader.binary,@1000+someprog.binary
+  to program an arbitrary binary like "someprog.binary"
+
+Used in loadp2 with permission of the authors.
+
+Writes user code (.obj) and loader into flash.
+On P2-ES Eval board "FLASH" switch must be on.
+
+
+"CODE" is stored in FLASH starting @ $1_0000
+First long is code size in bytes.
+
+See end of program for examples of how to include users .obj file.
+(or better yet use loadp2 to put the file in memory at
+ $1000, see above)
+}
+
+con
+
+		#58,spi_do,spi_di,spi_clk,spi_cs
+
+		write_enable = $06
+		block_unlock = $98
+		block_erase_64k = $D8
+		read_status = 5
+		device_id = $ab
+		enable_reset = $66
+		device_reset = $99
+		read_data = 3
+		page_program = 2
+		read_dual = $3b		' "Fast Read Dual Output" SPI command
+
+'==============================================================================================
+
+dat		org
+
+		drvh	#spi_cs
+		drvl	#spi_clk
+		drvl	#spi_di
+
+'faster loading
+		hubset	 .clk_mode		'config crystal and PLL - still running RCFAST
+		waitx	 ##25_000_000/100	'wait for crystal/PLL to ramp up
+		or	 .clk_mode, #XSEL	'select clock mode
+		hubset	 .clk_mode		'engage
+
+'compute checksum for SPI flash boot
+		call	#checksum
+
+'reset flash
+		call	#chip_reset
+'erase flash
+		mov	addr, #0		'erase_stage1
+		call	#erase_64k
+
+		mov	addr, ##$1_0000		'erase_code
+		mov	blocks, ##512 / 64
+.loop
+		call	#erase_64k
+		add	addr, ##$1_0000
+		djnz	blocks, #.loop
+
+'copy stage1 loader
+		call	#copy_stage1
+
+'copy code to $1_0000
+		
+		loc	ptra,#@size
+		rdlong	byte_count, ptra
+		call	#copy_code
+
+		hubset	##%0001 << 28	'hard reset for reboot to Flash
+
+		jmp	#$
+
+
+.clk_mode	long	1<<24 + (XDIV-1)<<18 + (XMUL-1)<<8 + XPPPP<<4 + XOSC<<2
+'.clk_mode	long	1<<24 + (XDIV*2-1)<<18 + (XMUL-1)<<8 + XPPPP<<4 + XOSC<<2	'hack for testing extreme overclocking
+
+'------------------------------------------------
+chip_reset
+		call	#busy
+'read device ID for scope to view
+		mov	pa, #device_id
+		outl	#spi_cs
+		call	#send_byte
+		call	#send_addr24		'dummy address
+		call	#read_byte
+		outh	#spi_cs
+
+		mov	pb, #2			'2 us pause in case was sleeping
+		call	#pause_us
+'do the reset
+		callpa	#enable_reset, #send_command
+		callpa	#device_reset, #send_command
+		mov	pb, #50			'50 us pause to let the interal reset occur
+		call	#pause_us
+'clear locks
+		callpa	#write_enable, #send_command
+		callpa	#block_unlock, #send_command
+		jmp	#busy
+
+'------------------------------------------------
+erase_64k	callpa	#write_enable,#send_command
+		mov	pa,#block_erase_64k
+		outl	#spi_cs
+		call	#send_byte
+		call	#send_addr24
+		outh	#spi_cs
+		call	#busy
+		ret
+
+copy_stage1	mov	pages,#4
+		mov	addr,#0
+		loc	ptra,#@stage1
+.loop2		callpa	#write_enable,#send_command
+		mov	byte_count,#256
+		outl	#spi_cs
+		mov	pa,#page_program
+		call	#send_byte
+		call	#send_addr24
+.loop		rdbyte	pa,ptra++
+		call	#send_byte
+		djnz	byte_count,#.loop
+		outh	#spi_cs
+		call	#busy
+		add	addr,#256
+		djnz	pages,#.loop2
+		ret
+
+copy_code	mov	pages,byte_count
+		shr	pages,#8
+		add	pages,#2
+		mov	addr,##$1_0000
+		loc	ptra,#@size
+.loop2		callpa	#write_enable,#send_command
+		mov	byte_count,#256
+		outl	#spi_cs
+		mov	pa,#page_program
+		call	#send_byte
+		call	#send_addr24
+.loop		rdbyte	pa,ptra++
+		call	#send_byte
+		djnz	byte_count,#.loop
+		outh	#spi_cs
+		call	#busy
+		add	addr,#256
+		djnz	pages,#.loop2
+		mov	pb, #2			'2 us pause
+		jmp	#pause_us
+
+'------------------------------------------------
+send_command
+		outl	#spi_cs
+		call	#send_byte
+	_ret_	outh	#spi_cs
+
+'------------------------------------------------
+send_addr24
+		getbyte	pa, addr, #2
+		call	#send_byte
+		getbyte	pa, addr, #1
+		call	#send_byte
+		getbyte	pa, addr, #0
+		jmp	#send_byte
+
+'------------------------------------------------
+send_byte
+		shl	pa, #32-7	wc
+
+		rep	@.loop, #8
+		outc	#spi_di
+		outh	#spi_clk
+		shl	pa, #1	wc
+		outl	#spi_clk
+.loop
+		ret			wcz	'preserve C/Z flags
+
+'------------------------------------------------
+read_byte
+		outh	#spi_clk
+
+		rep	@.loop, #7
+		outl	#spi_clk
+		testp	#spi_do		wc	'read in bit prior to clock pulse
+		outh	#spi_clk
+		rcl	val,#1
+.loop
+		outl	#spi_clk		'for first bit of subsequent byte, if any
+		testp	#spi_do		wc	'read final bit, OUTL from 10 clocks earlier
+		rcl	val,#1
+		ret			wcz	'preserve C/Z flags
+
+'------------------------------------------------
+busy
+		mov	pa, #read_status
+		outl	#spi_cs
+		call	#send_byte
+		call	#read_byte
+		outh	#spi_cs
+		testb	val, #0		wc	'write in progress
+	if_nc	ret			wcz	'preserve C/Z flags
+		jmp	#busy
+
+'------------------------------------------------
+checksum
+		loc	ptra, #@stage1
+		mov	pa, #0
+
+		rep	@.loop, #256
+		rdlong	pb, ptra++
+		add	pa, pb
+.loop
+		subr	pa, ##$706F7250 'Prop'
+		wrlong	pa, ptra[-1]
+		ret
+
+'------------------------------------------------
+pause_us
+		rep	@.rend, pb
+		waitx	#(CLOCKFREQ / 1_000_000)	'one microsecond - assumes a round number of MHz
+'		waitx	#(CLOCKFREQ / 2_000_000)	'hack for testing extreme overclocking
+.rend
+		ret
+
+
+blocks		long	0
+count		long	0
+addr		long	0
+pages		long	0
+xx		long	0
+byte_count	long	0
+val		long	0
+
+'==============================================================================================
+con
+	XTALFREQ	= 20_000_000			'PLL stage 0: crystal frequency
+	XDIV		= 2				'PLL stage 1: crystal divider (1..64)
+	XMUL		= 16				'PLL stage 2: crystal / div * mul (1..1024)
+	XDIVP		= 1				'PLL stage 3: crystal / div * mul / divp (1,2,4,6..30)
+
+	XOSC		= %10				' OSC    ' %00=OFF, %01=OSC, %10=15pF, %11=30pF
+	XSEL		= %11				' XI+PLL ' %00=rcfast(20+MHz), %01=rcslow(~20KHz), %10=XI(5ms), %11=XI+PLL(10ms)
+	XPPPP		= ((XDIVP>>1) + 15) & $F	' 1->15, 2->0, 4->1, 6->2...30->14
+	CLOCKFREQ	= round(float(XTALFREQ) / float(XDIV) * float(XMUL) / float(XDIVP))
+
+	BF_PLUS1	= (%0001 << 24)
+	BF_PLUS2	= (%0010 << 24)
+	BF_PLUS3	= (%0011 << 24)
+	BF_PLUS1NOT	= (%1001 << 24)
+	BF_PLUS2NOT	= (%1010 << 24)
+	BF_PLUS3NOT	= (%1011 << 24)
+
+	P_REGD		= (%1 << 16)			' turn on clocked digital I/O (registered pins)
+	SP_OUT		= (%1 << 6)			' force on pin output when DIR operates smartpin
+	SPM_PULSES	= %00100_0 |SP_OUT		' pulse/cycle output
+	SPM_SSER_TX	= %11100_0 |SP_OUT		' sync serial transmit (A-data, B-clock)
+	SPM_SSER_RX	= %11101_0			' sync serial receive (A-data, B-clock)
+	SP_SRX_LATE	= (%1 << 5)			' sync serial receiver post-clock sampling
+
+
+	DMADIV		= 4		'160 MHz sysclock / 4 = 40 MHz SPI clock (with dual SPI makes 80 Mbit/s or 10 MB/s)
+
+dat
+		orgh	$400
+		org
+
+stage1	
+'config pin for SPI chip select
+		drvh	#spi_cs
+		drvl	#spi_clk
+		drvl	#spi_di
+
+'faster loading
+		hubset	 .clk_mode		'config crystal and PLL - still running RCFAST
+		waitx	 .pause			'wait for crystal/PLL to ramp up
+		or	 .clk_mode, #XSEL	'select clock mode
+		hubset	 .clk_mode		'engage
+
+'load code @$1_0000 to hub address 0
+
+		mov	pb, ##$1_0000		'Flash address to load
+		outl	#spi_cs
+		callpa	#read_dual, #send_byte2
+
+		getbyte	pa, pb, #2		'send Flash reading address
+		call	#send_byte2
+		getbyte	pa, pb, #1
+		call	#send_byte2
+		getbyte	pa, pb, #0
+		call	#send_byte2
+
+'config one smartpin for SPI clock
+		wrpin	##SPM_PULSES, #spi_clk			'registered SPI clock pin, helps with timing
+		dirl	#spi_clk				'SPI clock stays driven low
+		wxpin	##((DMADIV/2)<<16) | DMADIV, #spi_clk	'pulse width (space->mark) and period respectively
+		dirh	#spi_clk
+
+'config two smartpins for SPI dual data
+		fltl	#spi_do			'stop driving the data pins before 2-bit reading starts
+		fltl	#spi_di
+
+		wypin	#8, #spi_clk		'pace out dummy clocks required by "Fast Read Dual Output"
+		waitx	#50
+
+		wrpin	##SPM_SSER_RX | P_REGD | BF_PLUS2NOT, #spi_do
+		wrpin	##SPM_SSER_RX | P_REGD | BF_PLUS1NOT, #spi_di
+		wxpin	#SP_SRX_LATE | 15, #spi_do			'2 x 16 bits, post-clock sampling
+		wxpin	#SP_SRX_LATE | 15, #spi_di
+		dirh	#spi_do
+		dirh	#spi_di
+
+'get length of binary data
+		setse1	#(%001<<6)|spi_do
+		wypin	#16, #spi_clk		'16 clock for first 32 bits containing binary length
+		pollse1				'clear prior event - needs a spacer instruction from SETSE1
+
+		call	#read_byte4		'get the "size" value
+		movbyts	pa, #%%0123		'endian swap 24bit length in bytes
+		add	pa, #3			'round up
+		shr	pa, #2			'scale to longwords
+		mov	.lcount, pa
+
+'full-on continuous burst, right up to sysclock/2!
+		wrfast	#0, #0			'start FIFO at beginning of hubRAM
+		shl	pa, #4			'x16 clocks per longword
+		wypin	pa, #spi_clk		'start clocking for the full length
+.loop
+		call	#read_byte4
+		movbyts	pa, #%%0123		'want as little-endian
+		wflong	pa
+		djnz	.lcount, #.loop
+
+		outh	#spi_cs
+		rdfast	#0, #0			'flush the FIFO
+
+'go back to RCFAST mode before handover
+		andn	 .clk_mode, #%11	'select RCFAST clock mode while retaining the old PLL config
+		hubset	 .clk_mode		'switch to RCFAST, critical reliability workaround for hardware bug
+		hubset	 #0			'shutdown crystal and PLL
+		waitx	 .pause			'wait for crystal shutdown, emulating hard reset conditions
+
+		coginit	#0, #0			'kick it!
+
+
+.clk_mode	long	1<<24 + (XDIV-1)<<18 + (XMUL-1)<<8 + XPPPP<<4 + XOSC<<2
+.pause		long	25_000_000/100
+.lcount		long	0
+
+
+'------------------------------------------------
+send_byte2
+		shl	pa, #32-7	wc
+		rep	@.loop,#8
+		outc	#spi_di
+		outh	#spi_clk
+		shl	pa, #1		wc
+		outl	#spi_clk
+.loop		
+		ret
+
+'------------------------------------------------
+read_byte4
+		waitse1				'wait for smartpin (spi_do) buffer full event
+
+		rdpin	pa, #spi_do		'16-bit shift-in as little-endian (odd bits)
+		rdpin	pb, #spi_di		'(even bits)
+		rev	pa			'but SPI data is stored as big-endian (odd bits)
+		rev	pb			'(even bits)
+		rolword	pa, pb, #0		'combine to a single 32-bit word
+	_ret_	mergew	pa			'untangle the odd-even pattern
+'------------------------------------------------
+
+		fit	$100
+		orgf	$100
+
+'==============================================================================================
+
+		orgh $1000
+
+size		long	@code_end - @code			'located at Flash address $1000
+
+code
+
+'example code indicating programming suceeded
+
+		drvh	#56			'LED56 off
+		drvh	#57			'LED57 off
+
+		rep	@.floop, #0		'loop forever toggling the LEDs
+		outnot	#56
+		outnot	#57
+		waitx	##(25_000_000/4)
+.floop
+
+
+'		file	"VGA_8bpp_es1.binary"
+code_end
+
