@@ -45,10 +45,13 @@ else
   DEFS=
 endif
 
+# board support programs
+BOARDS=board/P2ES_flashloader.bin
+
 # program for converting MainLoader.spin2 to MainLoader.binary
 PASM=fastspin -2
 
-default: $(BUILD)/loadp2$(EXT)
+default: $(BUILD)/loadp2$(EXT) $(BOARDS)
 
 HEADERS=MainLoader.h MainLoader1.h
 
