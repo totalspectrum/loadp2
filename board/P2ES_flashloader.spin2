@@ -37,6 +37,11 @@ con
 		page_program = 2
 		read_dual = $3b		' "Fast Read Dual Output" SPI command
 
+  		'' serial smart pin modes
+  		ser_txmode       = %0000_0000_000_0000000000000_01_11110_0 'async tx mode, output enabled for smart output
+		ser_tx_pin = 62
+		
+
 '==============================================================================================
 
 dat		org
@@ -51,11 +56,23 @@ dat		org
 		or	 .clk_mode, #XSEL	'select clock mode
 		hubset	 .clk_mode		'engage
 
+'set up serial output for progress messages
+     	     	dirl	#ser_tx_pin
+		wrpin	##ser_txmode, #ser_tx_pin
+		wxpin	ser_bitperiod, #ser_tx_pin
+		dirh	#ser_tx_pin
+
+		mov	ser_string, ##@boot_msg
+		call	#ser_tx_string
+		
 'compute checksum for SPI flash boot
 		call	#checksum
 
 'reset flash
 		call	#chip_reset
+		
+		mov	ser_string, ##@erase_msg
+		call	#ser_tx_string
 'erase flash
 		mov	addr, #0		'erase_stage1
 		call	#erase_64k
@@ -67,6 +84,9 @@ dat		org
 		add	addr, ##$1_0000
 		djnz	blocks, #.loop
 
+		mov	ser_string, ##@prog_msg
+		call	#ser_tx_string
+		
 'copy stage1 loader
 		call	#copy_stage1
 
@@ -76,14 +96,32 @@ dat		org
 		rdlong	byte_count, ptra
 		call	#copy_code
 
+		mov	ser_string, ##@done_msg
+		call	#ser_tx_string
+		waitx	##4*CLOCKFREQ
+		
 		hubset	##%0001 << 28	'hard reset for reboot to Flash
 
 		jmp	#$
 
-
 .clk_mode	long	1<<24 + (XDIV-1)<<18 + (XMUL-1)<<8 + XPPPP<<4 + XOSC<<2
 '.clk_mode	long	1<<24 + (XDIV*2-1)<<18 + (XMUL-1)<<8 + XPPPP<<4 + XOSC<<2	'hack for testing extreme overclocking
 
+ser_tx
+		wypin	ser_char, #ser_tx_pin
+		waitx	#20
+.txflush
+		testp	#ser_tx_pin wc
+	if_nc	jmp	#.txflush
+		ret
+
+ser_tx_string
+		rdbyte	ser_char, ser_string wz
+	if_z	ret
+		add	ser_string, #1
+		call	#ser_tx
+		jmp	#ser_tx_string
+		
 '------------------------------------------------
 chip_reset
 		call	#busy
@@ -238,9 +276,13 @@ pages		long	0
 xx		long	0
 byte_count	long	0
 val		long	0
+ser_bitperiod	long	7 + (CLOCKFREQ / SERIAL_BAUD)<<16
+ser_char	long	0
+ser_string	long	0
 
 '==============================================================================================
 con
+	SERIAL_BAUD     = 230_400
 	XTALFREQ	= 20_000_000			'PLL stage 0: crystal frequency
 	XDIV		= 2				'PLL stage 1: crystal divider (1..64)
 	XMUL		= 16				'PLL stage 2: crystal / div * mul (1..1024)
@@ -283,6 +325,7 @@ stage1
 		waitx	 .pause			'wait for crystal/PLL to ramp up
 		or	 .clk_mode, #XSEL	'select clock mode
 		hubset	 .clk_mode		'engage
+'set up serial
 
 'load code @$1_0000 to hub address 0
 
@@ -381,6 +424,18 @@ read_byte4
 		fit	$100
 		orgf	$100
 
+'==============================================================================================
+' string data and such
+		orgh
+boot_msg
+		byte	"P2-ES Flash Programmer", 13, 10, 0
+erase_msg
+		byte	"Erasing flash...", 13, 10, 0
+prog_msg
+		byte	"Programming...", 13, 10, 0
+done_msg
+		byte	"Done", 13, 10, 0
+		
 '==============================================================================================
 
 		orgh $1000
