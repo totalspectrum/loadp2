@@ -56,11 +56,15 @@ A script of keys to send after the download may be specified With the `-e` optio
 
 Within the string several special sequences are interpreted:
 ```
-^A send control-A; similarly for ^B, ^C, etc.
-^a send control-A
-^^ send a caret (^) symbol
-^{filename} send the contents of the file "filename"
+^A: send control-A; similarly for ^B, ^C, etc.
+^a: send control-A
+^^: send a caret (^) symbol
+^#: wait for 100 milliseconds
+^{filename}: send the contents of the file "filename"
+^/string/ or ^,string,: wait up to 1 second for the given string to appear
 ```
+
+Note that filenames are sent as text, with CR+LF converted to CR.
 
 ### Examples
 

@@ -57,7 +57,7 @@ static int enter_rom = NO_ENTER;
 static char *send_script = NULL;
 
 int get_loader_baud(int ubaud, int lbaud);
-static void RunScript(const char *script);
+static void RunScript(char *script);
 
 #if defined(__CYGWIN__) || defined(__MINGW32__) || defined(__MINGW64__)
   #define PORT_PREFIX "com"
@@ -1023,14 +1023,88 @@ int main(int argc, char **argv)
     promptexit(0);
 }
 
-#ifndef PATH_MAX
-#define PATH_MAX 1024
-#endif
+static void SendFileContents(char *filename)
+{
+    FILE *f = fopen(filename, "rt");
+    int c;
+    int count = 0;
+    if (!f) {
+        perror(filename);
+        return;
+    }
+    for(;;) {
+        c = fgetc(f);
+        if (c < 0) break;
+        if (c == '\r') {
+            // skip CR
+        } else if (c == '\n') {
+            tx_raw_byte('\r');
+        } else {
+            tx_raw_byte(c);
+        }
+        count++;
+        if (count > 80) {
+            // pause periodically for the other end to keep up
+            msleep(80);
+            count = 0;
+        }
+    }
+}
+// read a string terminated by term
+// returns a pointer to the string, and updates *ptr to point to the end
+static char *GetString(int term, char **where_p)
+{
+    char *script = *where_p;
+    char *filename;
+    int c;
 
-static void RunScript(const char *script)
+    c = *script;
+    if (!c || c==term) {
+        printf("ERROR: script expected string terminated with %c\n", term);
+        return NULL;
+    }
+    filename = script;
+    while (*script && *script != term) {
+        script++;
+    }
+    if (*script) {
+        *script++ = 0;
+    }
+    *where_p = script;
+    return filename;
+}
+
+static int WaitForString(char *string)
+{
+    int num;
+    char *here = string;
+    int retries = 0;
+    
+    for(;;) {
+        num = rx_timeout((uint8_t *)buffer, 1, 100);
+        if ((num <= 0 && retries++ > 100)) {
+            perror("timeout");
+            printf("ERROR: timeout waiting for string [%s]\n", string);
+            return 0;
+        }
+        if (buffer[0] != *here) {
+            // reset our expectations
+            here = string;
+            continue;
+        }
+        here++;
+        retries = 0;
+        if (!*here) {
+            break;
+        }
+    }
+    return 1;
+}
+
+static void RunScript(char *script)
 {
     int c;
-    char filename[PATH_MAX];
+    char *filename;
 
     msleep(200);
     printf("executing script [%s]\n", script);
@@ -1041,6 +1115,8 @@ static void RunScript(const char *script)
             if (!c) break;
             if (c == '^') {
                 tx_raw_byte(c);
+            } else if (c == '#') {
+                msleep(100);
             } else if (c >= '0' && c <= '9') {
                 int byte = 0;
                 while (c>= '0' && c <= '9') {
@@ -1051,6 +1127,11 @@ static void RunScript(const char *script)
                 tx_raw_byte(byte);
             } else if (c == '{') {
                 // send contents of a file
+                filename = GetString('}', &script);
+                SendFileContents(filename);
+            } else if (c == '/' || c == ',') {
+                filename = GetString(c, &script);
+                WaitForString(filename);
             } else {
                 tx_raw_byte(c & 0x1f);
             }
