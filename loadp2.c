@@ -54,8 +54,10 @@ static int patch_mode = 0;
 static int use_checksum = 0; // 1 seems to fail on MACOSX, not sure why
 static int quiet_mode = 0;
 static int enter_rom = NO_ENTER;
+static char *send_script = NULL;
 
 int get_loader_baud(int ubaud, int lbaud);
+static void RunScript(const char *script);
 
 #if defined(__CYGWIN__) || defined(__MINGW32__) || defined(__MINGW64__)
   #define PORT_PREFIX "com"
@@ -113,7 +115,7 @@ promptexit(int r)
 static void Usage(void)
 {
 printf("\
-loadp2 - a loader for the propeller 2 - version 0.031 2019-11-17\n\
+loadp2 - a loader for the propeller 2 - version 0.032 2019-11-30\n\
 usage: loadp2\n\
          [ -p port ]               serial port\n\
          [ -b baud ]               user baud rate (default is %d)\n\
@@ -136,6 +138,7 @@ usage: loadp2\n\
          [ -NOZERO ]               do not clear memory before download\n\
          [ -SINGLE ]               set load mode for single stage\n\
          filespec                  file to load\n\
+         [ -e script ]             send a sequence of characters after starting P2\n\
 ", user_baud, loader_baud, clock_freq, clock_mode);
 printf("\n\
 In -CHIP mode, filespec may optionally be multiple files with address\n\
@@ -806,6 +809,15 @@ int main(int argc, char **argv)
                 else
                     Usage();
             }
+            else if (argv[i][1] == 'e')
+            {
+                if(argv[i][2])
+                    send_script = &argv[i][2];
+                else if (++i < argc)
+                    send_script = argv[i];
+                else
+                    Usage();
+            }
             else if (argv[i][1] == 'f')
             {
                 if(argv[i][2])
@@ -847,8 +859,10 @@ int main(int argc, char **argv)
             }
             else if (argv[i][1] == 't')
                 runterm = 1;
-            else if (argv[i][1] == 'T')
+            else if (argv[i][1] == 'T') {
+                printf("Warning: PST mode is not implemented yet!\n");
                 runterm = pstmode = 1;
+            }
             else if (argv[i][1] == 'x') {
                 char *monitor = NULL;
                 if (argv[i][2])
@@ -899,15 +913,12 @@ int main(int argc, char **argv)
     }
 
     if (enter_rom) {
-        if (!runterm) {
-            runterm = 1;
-        }
         if (fname) {
             printf("Entering ROM is incompatible with downloading a file\n");
             Usage();
         }
     }
-    if (!fname && !runterm) Usage();
+    if (!fname && !runterm && !enter_rom) Usage();
 
     // Determine the user baud rate
     if (user_baud == -1)
@@ -919,7 +930,7 @@ int main(int argc, char **argv)
     // Initialize the loader baud rate
     // on some platforms the user and loader baud rates must match
     // this does not matter if we are not starting a terminal
-    if (runterm)
+    if (runterm || enter_rom || send_script)
     {
         int new_loader_baud = get_loader_baud(user_baud, loader_baud);
         if (new_loader_baud != loader_baud) {
@@ -981,7 +992,7 @@ int main(int argc, char **argv)
         }
     }
 
-    if (runterm)
+    if (runterm || enter_rom || send_script)
     {
         serial_baud(user_baud);
         switch(enter_rom) {
@@ -994,15 +1005,57 @@ int main(int argc, char **argv)
         default:
             break;
         }
-        if (!quiet_mode) {
-            printf("( Entering terminal mode.  Press Ctrl-] to exit. )\n");
+        if (send_script) {
+            RunScript(send_script);
         }
-        terminal_mode(1,pstmode);
-        if (!quiet_mode) {
-            waitAtExit = 0; // no need to wait, user explicitly quite
+        if (runterm) {
+            if (!quiet_mode) {
+                printf("( Entering terminal mode.  Press Ctrl-] to exit. )\n");
+            }
+            terminal_mode(1,pstmode);
+            if (!quiet_mode) {
+                waitAtExit = 0; // no need to wait, user explicitly quit
+            }
         }
     }
 
     serial_done();
     promptexit(0);
+}
+
+#ifndef PATH_MAX
+#define PATH_MAX 1024
+#endif
+
+static void RunScript(const char *script)
+{
+    int c;
+    char filename[PATH_MAX];
+
+    msleep(200);
+    printf("executing script [%s]\n", script);
+    
+    while ( (c = *script++) != 0) {
+        if (c == '^') {
+            c = *script++;
+            if (!c) break;
+            if (c == '^') {
+                tx_raw_byte(c);
+            } else if (c >= '0' && c <= '9') {
+                int byte = 0;
+                while (c>= '0' && c <= '9') {
+                    byte = 10*byte + (c-'0');
+                    c = *script++;
+                }
+                --script;
+                tx_raw_byte(byte);
+            } else if (c == '{') {
+                // send contents of a file
+            } else {
+                tx_raw_byte(c & 0x1f);
+            }
+        } else {
+            tx_raw_byte(c);
+        }
+    }
 }
