@@ -1107,7 +1107,7 @@ static void RunScript(char *script)
     char *filename;
 
     msleep(200);
-    printf("executing script [%s]\n", script);
+    //printf("executing script [%s]\n", script);
     
     while ( (c = *script++) != 0) {
         if (c == '^') {
