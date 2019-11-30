@@ -72,3 +72,19 @@ Start TAQOZ, send the file "myfile.fth", and then enter terminal mode:
 ```
 loadp2 -b230400 -xTAQOZ -e^{myfile.fth} -t
 ```
+
+## Compiling loadp2
+
+Use the standard Makefile.
+
+To cross compile do
+```
+  make CROSS=win32
+  make CROSS=macosx
+  make CROSS=linux32
+```
+
+To build natively on Mac OS X, do something like:
+```
+   make CC="gcc -DMACOSX"
+```
