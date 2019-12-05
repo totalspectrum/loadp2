@@ -164,7 +164,8 @@ copy_stage1	mov	pages,#4
 		mov	pa,#page_program
 		call	#send_byte
 		call	#send_addr24
-.loop		rdbyte	pa,ptra++
+.loop		rdbyte	pa,ptra
+		add	ptra,#1
 		call	#send_byte
 		djnz	byte_count,#.loop
 		outh	#spi_cs
@@ -184,7 +185,8 @@ copy_code	mov	pages,byte_count
 		mov	pa,#page_program
 		call	#send_byte
 		call	#send_addr24
-.loop		rdbyte	pa,ptra++
+.loop		rdbyte	pa,ptra
+		add	ptra,#1
 		call	#send_byte
 		djnz	byte_count,#.loop
 		outh	#spi_cs
@@ -253,11 +255,13 @@ checksum
 		mov	pa, #0
 
 		rep	@.loop, #256
-		rdlong	pb, ptra++
+		rdlong	pb, ptra
+		add	ptra, #4
 		add	pa, pb
 .loop
 		subr	pa, ##$706F7250 'Prop'
-		wrlong	pa, ptra[-1]
+		sub	ptra, #4
+		wrlong	pa, ptra
 		ret
 
 '------------------------------------------------
