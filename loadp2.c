@@ -29,6 +29,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdint.h>
+#include <ctype.h>
 #include "osint.h"
 #include "loadelf.h"
 
@@ -115,7 +116,7 @@ promptexit(int r)
 static void Usage(void)
 {
 printf("\
-loadp2 - a loader for the propeller 2 - version 0.032 2019-11-30\n\
+loadp2 - a loader for the propeller 2 - version 0.033 2019-12-05\n\
 usage: loadp2\n\
          [ -p port ]               serial port\n\
          [ -b baud ]               user baud rate (default is %d)\n\
@@ -1023,11 +1024,24 @@ int main(int argc, char **argv)
     promptexit(0);
 }
 
-static void SendFileContents(char *filename)
+//
+// script file helper routines
+//
+
+// send contents of a file:
+// if binary, send contents verbatim
+// if !binary, translate \n -> \r and drop \r
+
+// insert a 1 ms pause after this many characters are typed
+static int scriptVarPauseAfter = 100;
+
+static void SendFile(char *filename, int binary)
 {
-    FILE *f = fopen(filename, "rt");
+    FILE *f;
     int c;
     int count = 0;
+
+    f = fopen(filename, binary ? "rb" : "rt");    
     if (!f) {
         perror(filename);
         return;
@@ -1035,7 +1049,9 @@ static void SendFileContents(char *filename)
     for(;;) {
         c = fgetc(f);
         if (c < 0) break;
-        if (c == '\r') {
+        if (binary) {
+            tx_raw_byte(c);
+        } else if (c == '\r') {
             // skip CR
         } else if (c == '\n') {
             tx_raw_byte('\r');
@@ -1043,49 +1059,40 @@ static void SendFileContents(char *filename)
             tx_raw_byte(c);
         }
         count++;
-        if (count > 80) {
+        if (count >= scriptVarPauseAfter) {
             // pause periodically for the other end to keep up
-            msleep(80);
+            msleep(1);
             count = 0;
         }
     }
 }
-// read a string terminated by term
-// returns a pointer to the string, and updates *ptr to point to the end
-static char *GetString(int term, char **where_p)
-{
-    char *script = *where_p;
-    char *filename;
-    int c;
 
-    c = *script;
-    if (!c || c==term) {
-        printf("ERROR: script expected string terminated with %c\n", term);
-        return NULL;
-    }
-    filename = script;
-    while (*script && *script != term) {
-        script++;
-    }
-    if (*script) {
-        *script++ = 0;
-    }
-    *where_p = script;
-    return filename;
+static void
+scriptTextfile(char *name)
+{
+    SendFile(name, 0);
 }
 
-static int WaitForString(char *string)
+static void
+scriptBinfile(char *name)
+{
+    SendFile(name, 1);
+}
+
+static int scriptTimeout = 100;
+
+static void scriptRecv(char *string)
 {
     int num;
     char *here = string;
     int retries = 0;
     
     for(;;) {
-        num = rx_timeout((uint8_t *)buffer, 1, 100);
-        if ((num <= 0 && retries++ > 100)) {
+        num = rx_timeout((uint8_t *)buffer, 1, scriptTimeout);
+        if ((num <= 0 && retries++ > 10)) {
             perror("timeout");
             printf("ERROR: timeout waiting for string [%s]\n", string);
-            return 0;
+            return;
         }
         if (buffer[0] != *here) {
             // reset our expectations
@@ -1098,45 +1105,169 @@ static int WaitForString(char *string)
             break;
         }
     }
-    return 1;
+}
+
+static void scriptSend(char *string)
+{
+    int count = 0;
+    int c;
+
+    while ( (c = *string++) != 0 ) {
+        tx_raw_byte(c);
+        count++;
+        if (count >= scriptVarPauseAfter) {
+            msleep(1);
+            count = 0;
+        }
+    }
+}
+
+static void scriptPausems(char *arg)
+{
+    int delay = atoi(arg);
+    if (delay > 0) {
+        msleep(delay);
+    }
+}
+
+// script commands
+typedef struct command {
+    const char *name;
+    void (*func)(char *arg);
+} Command;
+
+static Command cmdlist[] = {
+    { "binfile", scriptBinfile },
+    { "pausems", scriptPausems },
+    { "recv", scriptRecv },
+    { "send", scriptSend },
+    { "textfile", scriptTextfile },
+    { 0, 0 }
+};
+
+// fetch the next command, and advance the script
+// pointer to just after it
+Command *GetCmd(char **script_p)
+{
+    char *script = *script_p;
+    char *cmdstr = NULL;
+    Command *cmd = NULL;
+    int c;
+
+    while ( (c = *script) != 0) {
+        cmdstr = script++;
+        if (isspace(c)) {
+            // just skip spaces
+            continue;
+        }
+        if (c == '#') {
+            // comment; skip to end of line
+            while ( (c = *script) != 0 ) {
+                script++;
+                if (c == '\n') break;
+            }
+            continue;
+        }
+        if (!isalpha(c)) {
+            printf("Unexpected character `%c' in script\n", c);
+            break;
+        }
+        //
+        // this is a command
+        // 
+        while (isalpha(*script)) script++;
+        if (*script) {
+            *script++ = 0;
+        }
+        // look up the command
+        for (cmd = &cmdlist[0]; cmd->name; cmd++) {
+            if (!strcmp(cmd->name, cmdstr)) {
+                break;
+            }
+        }
+        if (!cmd->name) {
+            printf("ERROR: unknown command `%s' in script\n", cmdstr);
+            cmd = NULL;
+        }
+    }
+    *script_p = script;
+    return cmd;
+}
+
+// read a string terminated by the character 'term'
+// returns a pointer to the string, and updates *ptr to point to the end
+// also translates any escape sequences within the string
+// it does the translation in place, since any ^ sequence translates
+// to something shorter than itself
+static char *GetString(int term, char **where_p)
+{
+    char *script = *where_p;
+    char *filename;
+    char *dst;
+    int c;
+
+    c = *script;
+    if (!c || c==term) {
+        printf("ERROR: script expected string terminated with %c\n", term);
+        return NULL;
+    }
+    filename = dst = script;
+    while ( (c = *script) != 0 && c != term) {
+        script++;
+        if (c == '^') {
+            // translate destination
+            c = *script;
+            if (!c) break;
+            script++;
+            if (c == '^' || c == term) {
+                *dst++ = c;
+            } else if (isalpha(c) || c == '[' || c == '@') {
+                *dst++ = (c & 0x1f);
+            } else if (isdigit(c)) {
+                c = (c - '0');
+                while (*script && isdigit(*script)) {
+                    c = 10*c + (*script - '0');
+                    script++;
+                }
+                *dst++ = c;
+            } else {
+                printf("Unknown ^ escape character `%c' in script\n", c);
+            }
+        } else {
+            *dst++ = c;
+        }
+    }
+    *dst = 0;
+    if (*script) {
+        script++;
+    }
+    *where_p = script;
+    return filename;
 }
 
 static void RunScript(char *script)
 {
+    Command *cmd;
+    char *arg;
     int c;
-    char *filename;
-
-    msleep(200);
-    //printf("executing script [%s]\n", script);
     
-    while ( (c = *script++) != 0) {
-        if (c == '^') {
-            c = *script++;
-            if (!c) break;
-            if (c == '^') {
-                tx_raw_byte(c);
-            } else if (c == '#') {
-                msleep(100);
-            } else if (c >= '0' && c <= '9') {
-                int byte = 0;
-                while (c>= '0' && c <= '9') {
-                    byte = 10*byte + (c-'0');
-                    c = *script++;
-                }
-                --script;
-                tx_raw_byte(byte);
-            } else if (c == '{') {
-                // send contents of a file
-                filename = GetString('}', &script);
-                SendFileContents(filename);
-            } else if (c == '/' || c == ',') {
-                filename = GetString(c, &script);
-                WaitForString(filename);
-            } else {
-                tx_raw_byte(c & 0x1f);
-            }
+    for(;;) {
+        cmd = GetCmd(&script);
+        if (!cmd) break;
+        while (*script && isspace(*script)) script++;
+        c = *script++;
+        if (!c) break;
+        if (c == '(') {
+            arg = GetString(')', &script);
+        } else if (c == '[') {
+            arg = GetString(']', &script);
+        } else if (c == '{') {
+            arg = GetString('}', &script);
         } else {
-            tx_raw_byte(c);
+            printf("Unexpected character `%c' in script (after %s)\n", c, cmd->name);
+            arg = NULL;
         }
+        if (!arg) break;
+        (*cmd->func)(arg);
     }
 }
