@@ -98,7 +98,7 @@ dat		org
 
 		mov	ser_string, ##@done_msg
 		call	#ser_tx_string
-		waitx	##4*CLOCKFREQ
+		waitx	##CLOCKFREQ
 		
 		hubset	##%0001 << 28	'hard reset for reboot to Flash
 
@@ -394,6 +394,14 @@ stage1
 		hubset	 #0			'shutdown crystal and PLL
 		waitx	 .pause			'wait for crystal shutdown, emulating hard reset conditions
 
+		dirl	#0, #spi_clk
+		dirl	#0, #spi_di
+		dirl	#0, #spi_do
+		
+		wrpin	#0, #spi_clk
+		wrpin	#0, #spi_di
+		wrpin	#0, #spi_do
+		
 		coginit	#0, #0			'kick it!
 
 
