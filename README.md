@@ -55,6 +55,20 @@ The main executable code must always be specified first
 A script of commands to perform after the download may be specified With the `-e` option. The various commands allowed
 are specified below. Each command takes one argument, which is an escaped string bracketed either by `(` and `)` or by `{` and `}`. For example, to pause for 10 milliseconds one would use the command `pausems(10)` or `pausems{10}`. To send a right parenthesis one would use either `send{)}` or `send(^))`; note that in the second form we have to escape the parenthesis with `^`, otherwise it would be interpreted as the end of the string.
 
+### Commands
+
+The specific commands are discussed later, but here is a list of them:
+```
+binfile(fname):    send a binary file to the P2
+pauseafter(N):     insert a 1ms pause after N characters transmitted
+pausems(N):        delay for N milliseconds
+recv(string):      wait until string is received
+recvtimeout(N):    set a timeout in ms for the recv() command
+scriptfile(fname): read script commands from file "fname"
+send(string):      send a string to the P2
+textfile(fname):   send contents of a text file to the P2
+```
+
 ### Strings
 
 Within scripts several special sequences are interpreted:

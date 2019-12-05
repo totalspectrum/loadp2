@@ -1212,7 +1212,7 @@ static Command cmdlist[] = {
     { "pausems", scriptPausems },
     { "recv", scriptRecv },
     { "recvtimeout", scriptRecvtimeout },
-    { "scriptFile", scriptScriptfile },
+    { "scriptfile", scriptScriptfile },
     { "send", scriptSend },
     { "textfile", scriptTextfile },
     { 0, 0 }
