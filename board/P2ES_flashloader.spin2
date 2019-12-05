@@ -394,9 +394,9 @@ stage1
 		hubset	 #0			'shutdown crystal and PLL
 		waitx	 .pause			'wait for crystal shutdown, emulating hard reset conditions
 
-		dirl	#0, #spi_clk
-		dirl	#0, #spi_di
-		dirl	#0, #spi_do
+		dirl	#spi_clk
+		dirl	#spi_di
+		dirl	#spi_do
 		
 		wrpin	#0, #spi_clk
 		wrpin	#0, #spi_di
