@@ -50,27 +50,54 @@ loaded with a filespec of:
 ```
 The main executable code must always be specified first
 
-## Key Scripts
+## Scripts
 
-A script of keys to send after the download may be specified With the `-e` option. This is a string which will be sent to the P2 after the executable is started (and after a short delay), as if the user typed it.
+A script of actions to perform after the download may be specified With the `-e` option. The various actions allowed
+are specified below.
 
-Within the string several special sequences are interpreted:
+### Strings
+
+Within scripts several special sequences are interpreted:
 ```
-^A: send control-A; similarly for ^B, ^C, etc.
-^a: send control-A
 ^^: send a caret (^) symbol
-^#: wait for 100 milliseconds
-^{filename}: send the contents of the file "filename"
-^/string/ or ^,string,: wait up to 1 second for the given string to appear
+^): send a right parenthesis; otherwise the right parenthesis would terminate the string
+^(: send a left parenthesis
+^A: send control-A; similarly for ^B, ^C, etc.
+^a: send control-A; similarly for ^b, ^c, etc.
+^0, ^1, etc.: starts a decimal escape sequence. The decimal number is translated to a single ASCII character and sent
 ```
+Note that it is difficult to use decimal escape sequences that are followed by digits; for example to send ASCII 11 followed by the digit 2 one cannot do `send(^112)` because this will be interpreted as sending an ASCII 112. You may work around this by translating the digit into a further escape sequence, e.g. `send(^11^50)` (the ASCII code for "2" is 50).
 
-Note that filenames are sent as text, with CR+LF converted to CR.
+### binfile
 
-### Examples
+Sends the contents of a file as binary (no translation performed on the contents). So `binfile(foo.txt)` sends the contents of the file `foo.txt` exactly as they are. If lines end in DOS style carriage return + line feed, both of those characters (ASCII 13 and ASCII 10) will be sent.
+
+### pausems
+
+Wait for a number of milliseconds, e.g. `pausems(100)` will wait for 100 milliseconds.
+
+### recv
+
+Wait for the other end to send a string. For example `recv(>>>)` waits for the other end to send the string `>>>`.
+
+### scriptfile
+
+Read and execute the contents of a file as a script.
+
+### send
+
+Sends a string as if the user typed it. Note that the usual string escape sequences are interpreted. So to send
+`hello` and then a carriage return, use `send(hello^M)` or `send(hello^13)`.
+
+### textfile
+
+Sends the contents of a file. The name of the file is escaped with the usual `^` sequences. End of line markers in the file are translated to control-M.
+
+### Script Examples
 
 Start TAQOZ, send the file "myfile.fth", and then enter terminal mode:
 ```
-loadp2 -b230400 -xTAQOZ -e^{myfile.fth} -t
+loadp2 -b230400 -xTAQOZ "-e textfile(myfile.fth)" -t
 ```
 
 ## Compiling loadp2

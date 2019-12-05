@@ -1145,6 +1145,8 @@ static Command cmdlist[] = {
     { 0, 0 }
 };
 
+static int scriptVarStringStart;
+
 // fetch the next command, and advance the script
 // pointer to just after it
 Command *GetCmd(char **script_p)
@@ -1154,7 +1156,8 @@ Command *GetCmd(char **script_p)
     Command *cmd = NULL;
     int c;
 
-    while ( (c = *script) != 0) {
+    scriptVarStringStart = 0;
+    while ( !cmd && (c = *script) != 0) {
         cmdstr = script++;
         if (isspace(c)) {
             // just skip spaces
@@ -1169,7 +1172,7 @@ Command *GetCmd(char **script_p)
             continue;
         }
         if (!isalpha(c)) {
-            printf("Unexpected character `%c' in script\n", c);
+            printf("Unexpected character `%c' in script (searching for command name)\n", c);
             break;
         }
         //
@@ -1177,6 +1180,7 @@ Command *GetCmd(char **script_p)
         // 
         while (isalpha(*script)) script++;
         if (*script) {
+            scriptVarStringStart=*script;
             *script++ = 0;
         }
         // look up the command
@@ -1202,7 +1206,7 @@ Command *GetCmd(char **script_p)
 static char *GetString(int term, char **where_p)
 {
     char *script = *where_p;
-    char *filename;
+    char *argname;
     char *dst;
     int c;
 
@@ -1211,7 +1215,7 @@ static char *GetString(int term, char **where_p)
         printf("ERROR: script expected string terminated with %c\n", term);
         return NULL;
     }
-    filename = dst = script;
+    argname = dst = script;
     while ( (c = *script) != 0 && c != term) {
         script++;
         if (c == '^') {
@@ -1237,12 +1241,12 @@ static char *GetString(int term, char **where_p)
             *dst++ = c;
         }
     }
-    *dst = 0;
     if (*script) {
         script++;
     }
+    *dst = 0;
     *where_p = script;
-    return filename;
+    return argname;
 }
 
 static void RunScript(char *script)
@@ -1252,10 +1256,19 @@ static void RunScript(char *script)
     int c;
     
     for(;;) {
+        //printf("script=[%s]\n", script);
         cmd = GetCmd(&script);
         if (!cmd) break;
-        while (*script && isspace(*script)) script++;
-        c = *script++;
+        //printf("Got command [%s] script=[%s]\n", cmd->name, script);
+        if (scriptVarStringStart) {
+            c = scriptVarStringStart;
+        } else {
+            c = 0;
+        }
+        while (c && isspace(c)) {
+            c = *script;
+            if (c) script++;
+        }
         if (!c) break;
         if (c == '(') {
             arg = GetString(')', &script);
@@ -1268,6 +1281,7 @@ static void RunScript(char *script)
             arg = NULL;
         }
         if (!arg) break;
+        //printf("Command=%s arg=[%s]\n", cmd->name, arg);
         (*cmd->func)(arg);
     }
 }
