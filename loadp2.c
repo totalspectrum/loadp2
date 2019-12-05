@@ -1035,7 +1035,7 @@ int main(int argc, char **argv)
 // insert a 1 ms pause after this many characters are typed
 static int scriptVarPauseAfter = 100;
 
-static void SendFile(char *filename, int binary)
+static int SendFile(char *filename, int binary)
 {
     FILE *f;
     int c;
@@ -1044,7 +1044,7 @@ static void SendFile(char *filename, int binary)
     f = fopen(filename, binary ? "rb" : "rt");    
     if (!f) {
         perror(filename);
-        return;
+        return 0;
     }
     for(;;) {
         c = fgetc(f);
@@ -1065,34 +1065,36 @@ static void SendFile(char *filename, int binary)
             count = 0;
         }
     }
+    fclose(f);
+    return 1;
 }
 
-static void
+static int
 scriptTextfile(char *name)
 {
-    SendFile(name, 0);
+    return SendFile(name, 0);
 }
 
-static void
+static int
 scriptBinfile(char *name)
 {
-    SendFile(name, 1);
+    return SendFile(name, 1);
 }
 
-static int scriptTimeout = 100;
+static int scriptVarTimeout = 100;
 
-static void scriptRecv(char *string)
+static int scriptRecv(char *string)
 {
     int num;
     char *here = string;
     int retries = 0;
     
     for(;;) {
-        num = rx_timeout((uint8_t *)buffer, 1, scriptTimeout);
+        num = rx_timeout((uint8_t *)buffer, 1, scriptVarTimeout);
         if ((num <= 0 && retries++ > 10)) {
             perror("timeout");
             printf("ERROR: timeout waiting for string [%s]\n", string);
-            return;
+            return 0;
         }
         if (buffer[0] != *here) {
             // reset our expectations
@@ -1105,9 +1107,10 @@ static void scriptRecv(char *string)
             break;
         }
     }
+    return 1;
 }
 
-static void scriptSend(char *string)
+static int scriptSend(char *string)
 {
     int count = 0;
     int c;
@@ -1120,26 +1123,62 @@ static void scriptSend(char *string)
             count = 0;
         }
     }
+    return 1;
 }
 
-static void scriptPausems(char *arg)
+static int scriptPausems(char *arg)
 {
     int delay = atoi(arg);
     if (delay > 0) {
         msleep(delay);
     }
+    return 1;
+}
+
+#define MAX_SCRIPTFILE_SIZE (256*1024)
+
+static int scriptScriptfile(char *arg)
+{
+    char *origscript;
+    FILE *f = fopen(arg, "r");
+    int r;
+    
+    if (!f) {
+        perror(arg);
+        return 0;
+    }
+    origscript = calloc(1, MAX_SCRIPTFILE_SIZE);
+    if (!origscript) {
+        printf("Out of memory in scriptfile\n");
+        fclose(f);
+        return 0;
+    }
+    r = fread(origscript, 1, MAX_SCRIPTFILE_SIZE, f);
+    fclose(f);
+    if (r <= 0) {
+        printf("Read error in script `%s'\n", arg);
+        return 0;
+    }
+    if (r >= MAX_SCRIPTFILE_SIZE-1) {
+        printf("Script file `%s' is too large\n", arg);
+        return 0;
+    }
+    RunScript(origscript);
+    free(origscript);
+    return 1;
 }
 
 // script commands
 typedef struct command {
     const char *name;
-    void (*func)(char *arg);
+    int (*func)(char *arg);
 } Command;
 
 static Command cmdlist[] = {
     { "binfile", scriptBinfile },
     { "pausems", scriptPausems },
     { "recv", scriptRecv },
+    { "scriptFile", scriptScriptfile },
     { "send", scriptSend },
     { "textfile", scriptTextfile },
     { 0, 0 }
@@ -1254,6 +1293,7 @@ static void RunScript(char *script)
     Command *cmd;
     char *arg;
     int c;
+    int r;
     
     for(;;) {
         //printf("script=[%s]\n", script);
@@ -1282,6 +1322,7 @@ static void RunScript(char *script)
         }
         if (!arg) break;
         //printf("Command=%s arg=[%s]\n", cmd->name, arg);
-        (*cmd->func)(arg);
+        r = (*cmd->func)(arg);
+        if (!r) break;
     }
 }

@@ -52,15 +52,16 @@ The main executable code must always be specified first
 
 ## Scripts
 
-A script of actions to perform after the download may be specified With the `-e` option. The various actions allowed
-are specified below.
+A script of commands to perform after the download may be specified With the `-e` option. The various commands allowed
+are specified below. Each command takes one argument, which is an escaped string bracketed either by `(` and `)` or by `{` and `}`. For example, to pause for 10 milliseconds one would use the command `pausems(10)` or `pausems{10}`. To send a right parenthesis one would use either `send{)}` or `send(^))`; note that in the second form we have to escape the parenthesis with `^`, otherwise it would be interpreted as the end of the string.
 
 ### Strings
 
 Within scripts several special sequences are interpreted:
 ```
 ^^: send a caret (^) symbol
-^): send a right parenthesis; otherwise the right parenthesis would terminate the string
+^): send a right parenthesis
+^}: send a right bracket
 ^(: send a left parenthesis
 ^A: send control-A; similarly for ^B, ^C, etc.
 ^a: send control-A; similarly for ^b, ^c, etc.
@@ -71,6 +72,11 @@ Note that it is difficult to use decimal escape sequences that are followed by d
 ### binfile
 
 Sends the contents of a file as binary (no translation performed on the contents). So `binfile(foo.txt)` sends the contents of the file `foo.txt` exactly as they are. If lines end in DOS style carriage return + line feed, both of those characters (ASCII 13 and ASCII 10) will be sent.
+
+Example:
+```
+binfile(myfile.bin)
+```
 
 ### pausems
 
@@ -95,9 +101,14 @@ Sends the contents of a file. The name of the file is escaped with the usual `^`
 
 ### Script Examples
 
-Start TAQOZ, send the file "myfile.fth", and then enter terminal mode:
+Start TAQOZ, pause for 1000 milliseconds, send the file "myfile.fth", and then enter terminal mode:
 ```
-loadp2 -b230400 -xTAQOZ "-e textfile(myfile.fth)" -t
+loadp2 -b230400 -xTAQOZ -e "pausems(1000) textfile(myfile.fth)" -t
+```
+
+Start upython, pause for 1000 milliseconds, wait for the prompt >>>, then send the string `print('hi')` and a carriage return:
+```
+loadp2 -b230400 upython.binary -e "pausems(1000) recv(>>> ) send{print('hi')^M}" -t
 ```
 
 ## Compiling loadp2
