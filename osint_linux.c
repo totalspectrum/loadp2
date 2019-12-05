@@ -39,9 +39,11 @@
 #include <sys/timeb.h>
 #include <sys/select.h>
 #include <sys/types.h>
+#include <sys/time.h>
 #include <dirent.h>
 #include <limits.h>
 #include <signal.h>
+#include <time.h>
 
 #ifdef MACOSX
 #include <IOKit/serial/ioss.h>
@@ -483,4 +485,16 @@ done:
         exit(exitcode);
       }
     
+}
+
+unsigned long long
+elapsedms(void)
+{
+    struct timeval t;
+
+    if (!gettimeofday(&t, NULL)) {
+        // how could this fail??
+        return time(NULL) * 1000ULL;
+    }
+    return 1000 * (unsigned long long)t.tv_sec + ((unsigned long long)t.tv_usec/1000);
 }

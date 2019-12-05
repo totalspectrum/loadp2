@@ -55,4 +55,7 @@ void terminal_mode(int check_for_exit, int pst_mode);
 /* miscellaneous functions */
 void msleep(int ms);
 
+/* fetch elapsed milliseconds since some point in the past */
+unsigned long long elapsedms(void);
+
 #endif

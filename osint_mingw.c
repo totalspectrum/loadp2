@@ -367,3 +367,16 @@ void terminal_mode(int check_for_exit, int pst_mode)
     }
 }
 
+unsigned long long
+elapsedms(void)
+{
+    FILETIME ft;
+    unsigned long long t;
+    
+    GetSystemTimeAsFileTime(&ft);
+    t = ft.dwHighDateTime;
+    t = (t<<32) | ft.dwLowDateTime;
+    // Windows file times are in 100 ns intervals
+    t /= 10000; // convert to milliseconds; 
+    return t;
+}

@@ -73,10 +73,18 @@ Note that it is difficult to use decimal escape sequences that are followed by d
 
 Sends the contents of a file as binary (no translation performed on the contents). So `binfile(foo.txt)` sends the contents of the file `foo.txt` exactly as they are. If lines end in DOS style carriage return + line feed, both of those characters (ASCII 13 and ASCII 10) will be sent.
 
+Note that the `pauseafter(N)` command may be used to specify that a 1 millisecond pause should be inserted after every N characters sent. The default is not to insert pauses.
+
 Example:
 ```
 binfile(myfile.bin)
 ```
+
+### pauseafter
+
+Specifies a count of characters to pause after during any file transmission. That is, if you call `pauseafter(10)` then after every 10 characters sent a 1 millisecond pause is inserted. This is useful for throttling scripts that are sending to programs that cannot process data very quickly.
+
+The default is 0, which indicates that no pauses should be inserted.
 
 ### pausems
 
@@ -84,20 +92,29 @@ Wait for a number of milliseconds, e.g. `pausems(100)` will wait for 100 millise
 
 ### recv
 
-Wait for the other end to send a string. For example `recv(>>>)` waits for the other end to send the string `>>>`.
+Wait for the other end to send a string. For example `recv(>>>)` waits for the other end to send the string `>>>`. If the requested string is not received within the time specified by the last `recvtimeout` call, then fail. The default timeout value is 1000 (i.e. one second).
+
+### recvtimeout
+
+Set the time (in milliseconds) for subsequent `recv` calls to time out. A value of 0 causes `recv` to never time out.
 
 ### scriptfile
 
-Read and execute the contents of a file as a script.
+Read and execute the contents of a file as a script. If the script fails an error message will be printed, but the main script will continue executing. However, if the script file itself cannot be opened or read then the calling script will terminate.
+
+Script files may be at most 256K bytes long.
 
 ### send
 
-Sends a string as if the user typed it. Note that the usual string escape sequences are interpreted. So to send
-`hello` and then a carriage return, use `send(hello^M)` or `send(hello^13)`.
+Sends a string as if the user typed it. Note that the usual string escape sequences are interpreted. So to send `hello` and then a carriage return, use `send(hello^M)` or `send(hello^13)`.
+
+Note that the `pauseafter(N)` command may be used to specify that a 1 millisecond pause should be inserted after every N characters. The default is not to insert pauses.
 
 ### textfile
 
 Sends the contents of a file. The name of the file is escaped with the usual `^` sequences. End of line markers in the file are translated to control-M.
+
+Note that the `pauseafter(N)` command may be used to specify that a 1 millisecond pause should be inserted after every N characters sent. The default is not to insert pauses.
 
 ### Script Examples
 

@@ -1028,12 +1028,43 @@ int main(int argc, char **argv)
 // script file helper routines
 //
 
+// insert a 1 ms pause after this many characters are typed (0 disables)
+static int scriptVarPauseAfter = 0;
+
+// default timeout in milliseconds for recv() function (0 disables)
+static int scriptVarRecvTimeout = 2000;
+
+// some setter functions
+static int scriptRecvtimeout(char *arg)
+{
+    int val = atoi(arg);
+    if (val == 0) {
+        if (!isdigit(*arg)) {
+            printf("bad parameter to recvtimeout\n");
+            return 0;
+        }
+    }
+    scriptVarRecvTimeout = val;
+    return 1;
+}
+
+// some setter functions
+static int scriptPauseafter(char *arg)
+{
+    int val = atoi(arg);
+    if (val == 0) {
+        if (!isdigit(*arg)) {
+            printf("bad parameter to pauseafter\n");
+            return 0;
+        }
+    }
+    scriptVarPauseAfter = val;
+    return 1;
+}
+
 // send contents of a file:
 // if binary, send contents verbatim
 // if !binary, translate \n -> \r and drop \r
-
-// insert a 1 ms pause after this many characters are typed
-static int scriptVarPauseAfter = 100;
 
 static int SendFile(char *filename, int binary)
 {
@@ -1081,20 +1112,22 @@ scriptBinfile(char *name)
     return SendFile(name, 1);
 }
 
-static int scriptVarTimeout = 100;
-
 static int scriptRecv(char *string)
 {
     int num;
     char *here = string;
-    int retries = 0;
+    unsigned long long start = elapsedms();
+    unsigned long long now;
     
     for(;;) {
-        num = rx_timeout((uint8_t *)buffer, 1, scriptVarTimeout);
-        if ((num <= 0 && retries++ > 10)) {
-            perror("timeout");
+        now = elapsedms();
+        if ( scriptVarRecvTimeout && (now - start) > scriptVarRecvTimeout ) {
             printf("ERROR: timeout waiting for string [%s]\n", string);
             return 0;
+        }
+        num = rx_timeout((uint8_t *)buffer, 1, 1);
+        if ((num <= 0)) {
+            continue;
         }
         if (buffer[0] != *here) {
             // reset our expectations
@@ -1102,7 +1135,6 @@ static int scriptRecv(char *string)
             continue;
         }
         here++;
-        retries = 0;
         if (!*here) {
             break;
         }
@@ -1118,7 +1150,7 @@ static int scriptSend(char *string)
     while ( (c = *string++) != 0 ) {
         tx_raw_byte(c);
         count++;
-        if (count >= scriptVarPauseAfter) {
+        if ( scriptVarPauseAfter && count >= scriptVarPauseAfter) {
             msleep(1);
             count = 0;
         }
@@ -1176,8 +1208,10 @@ typedef struct command {
 
 static Command cmdlist[] = {
     { "binfile", scriptBinfile },
+    { "pauseafter", scriptPauseafter },
     { "pausems", scriptPausems },
     { "recv", scriptRecv },
+    { "recvtimeout", scriptRecvtimeout },
     { "scriptFile", scriptScriptfile },
     { "send", scriptSend },
     { "textfile", scriptTextfile },
