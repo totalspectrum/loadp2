@@ -861,7 +861,6 @@ int main(int argc, char **argv)
             else if (argv[i][1] == 't')
                 runterm = 1;
             else if (argv[i][1] == 'T') {
-                printf("Warning: PST mode is not implemented yet!\n");
                 runterm = pstmode = 1;
             }
             else if (argv[i][1] == 'x') {

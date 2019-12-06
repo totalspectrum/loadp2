@@ -31,7 +31,7 @@ usage: loadp2
          [ -NOZERO ]               do not clear memory before download
          [ -SINGLE ]               set load mode for single stage
          filespec                  file(s) to load
-	 [ -e script ]             send script characters after loading
+	 [ -e script ]             execute script after loading
 ```
 
 ## Loading multiple files
@@ -80,7 +80,7 @@ Within scripts several special sequences are interpreted:
 ^a: send control-A; similarly for ^b, ^c, etc.
 ^0, ^1, etc.: starts a decimal escape sequence. The decimal number is translated to a single ASCII character and sent
 ```
-Note that it is difficult to use decimal escape sequences that are followed by digits; for example to send ASCII 11 followed by the digit 2 one cannot do `send(^112)` because this will be interpreted as sending an ASCII 112. You may work around this by translating the digit into a further escape sequence, e.g. `send(^11^50)` (the ASCII code for "2" is 50).
+Note that it is difficult to use decimal escape sequences that are followed by digits; for example to send ASCII 11 followed by the digit 2 one cannot do `send(^112)` because this will be interpreted as sending an ASCII 112. You may work around this by translating the digit into a further escape sequence, e.g. `send(^11^50)` (the ASCII code for "2" is 50), or by splitting the send up into something like `send(^11) send(S)`.
 
 ### binfile
 
