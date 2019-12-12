@@ -58,7 +58,7 @@ HEADERS=MainLoader.h MainLoader1.h
 U9FS=u9fs/u9fs.c u9fs/authnone.c u9fs/print.c u9fs/doprint.c u9fs/rune.c u9fs/fcallconv.c u9fs/dirmodeconv.c u9fs/convM2D.c u9fs/convS2M.c u9fs/convD2M.c u9fs/convM2S.c u9fs/readn.c
 
 $(BUILD)/loadp2$(EXT): $(BUILD) loadp2.c loadelf.c loadelf.h osint_linux.c osint_mingw.c $(HEADERS) $(U9FS)
-	$(CC) -Wall -O $(DEFS) -o $@ loadp2.c loadelf.c $(OSFILE) $(U9FS)
+	$(CC) -Wall -Og -g $(DEFS) -o $@ loadp2.c loadelf.c $(OSFILE) $(U9FS)
 
 clean:
 	rm -rf $(BUILD) *.o $(HEADERS) *.pasm *.bin

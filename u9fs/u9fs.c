@@ -235,22 +235,24 @@ void
 getfcallnew(int fd, Fcall *fc, int have)
 {
 	int len;
-
-	if(have > BIT32SZ)
-		sysfatal("cannot happen");
-
-	if(have < BIT32SZ && readn(fd, rxbuf+have, BIT32SZ-have) != BIT32SZ-have)
+        int totallen;
+        
+        if(have < BIT32SZ) {
+            if(readn(fd, rxbuf+have, BIT32SZ-have) != BIT32SZ-have)
 		sysfatal("couldn't read message");
+            have = BIT32SZ;
+        }
 
-	len = GBIT32(rxbuf);
-	if(len <= BIT32SZ)
+	totallen = GBIT32(rxbuf);
+	if(totallen <= BIT32SZ)
 		sysfatal("bogus message");
 
-	len -= BIT32SZ;
-	if(readn(fd, rxbuf+BIT32SZ, len) != len)
+	len = totallen - have;
+        if (len >= 0) {
+            if(readn(fd, rxbuf+have, len) != len)
 		sysfatal("short message");
-
-	if(convM2S(rxbuf, len+BIT32SZ, fc) != len+BIT32SZ)
+        }
+	if(convM2S(rxbuf, totallen, fc) != totallen)
 		sysfatal("badly sized message type %d", rxbuf[0]);
 }
 
@@ -1675,10 +1677,12 @@ userremove(Fid *fid, char **ep)
 int
 u9fs_init(char *user_root)
 {
-	int logflag;
-        int fd;
 	chatty9p = 1;
 	auth = authmethods[0];
+
+#ifdef NEVER       
+        int fd;
+	int logflag;
 	logflag = O_WRONLY|O_APPEND|O_CREAT;
 	fd = open(logfile, logflag, 0666);
 	if(fd < 0)
@@ -1689,6 +1693,7 @@ u9fs_init(char *user_root)
 			sysfatal("cannot dup fd onto stderr");
 		close(fd);
 	}
+#endif        
 	fprint(2, "u9fs\nkill %d\n", (int)getpid());
 
 	fmtinstall('F', fcallconv);

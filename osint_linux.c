@@ -446,6 +446,8 @@ void terminal_mode(int check_for_exit, int pst_mode)
                           sawexit_valid = 1;
                         } else if (buf[i] == 1) {
                             u9fs_process(cnt - (i+1), &buf[i+1]);
+                            sawexit_char = 0;
+                            break;
                         } else {
                           realbuf[realbytes++] = exit_char;
                           realbuf[realbytes++] = buf[i];
@@ -460,7 +462,9 @@ void terminal_mode(int check_for_exit, int pst_mode)
                             realbuf[realbytes++] = '\n';
                       }
                     }
-                    write(fileno(stdout), realbuf, realbytes);
+                    if (realbytes > 0) {
+                        write(fileno(stdout), realbuf, realbytes);
+                    }
                 }
             }
             if (FD_ISSET(STDIN_FILENO, &set)) {
