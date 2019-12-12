@@ -1,4 +1,4 @@
-#include	<plan9.h>
+#include	"plan9.h"
 
 #define lock(x)
 #define unlock(x)

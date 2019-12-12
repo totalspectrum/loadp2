@@ -1,6 +1,6 @@
-#include <plan9.h>
-#include <fcall.h>
-#include <u9fs.h>
+#include "plan9.h"
+#include "fcall.h"
+#include "u9fs.h"
 
 static char*
 noneauth(Fcall *rx, Fcall *tx)

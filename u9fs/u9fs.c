@@ -1,11 +1,9 @@
 /* already in plan9.h #include <sys/types.h> *//* for struct passwd, struct group, struct stat ... */
 /* plan9.h is first to get the large file support definitions as early as possible */
-#include <plan9.h>
+#include "plan9.h"
 #include <sys/stat.h>	/* for stat, umask */
 #include <stdlib.h>	/* for malloc */
 #include <string.h>	/* for strcpy, memmove */
-#include <pwd.h>	/* for getpwnam, getpwuid */
-#include <grp.h>	/* for getgrnam, getgrgid */
 #include <unistd.h>	/* for gethostname, pread, pwrite, read, write */
 #include <utime.h>	/* for utime */
 #include <dirent.h>	/* for readdir */
@@ -14,13 +12,40 @@
 #include <fcntl.h>	/* for O_RDONLY, etc. */
 #include <limits.h>	/* for PATH_MAX */
 
-#include <sys/socket.h>	/* various networking crud */
-#include <netinet/in.h>
-#include <netdb.h>
+#include "fcall.h"
+#include "u9fs.h"
 
-#include <fcall.h>
-#include <oldfcall.h>
-#include <u9fs.h>
+#define DEFAULT_UID 1
+#define DEFAULT_GID 1
+
+struct passwd {
+    char *pw_name;
+    char *pw_passwd;
+    uid_t pw_uid;
+    gid_t pw_gid;
+} default_user = {
+    "user",
+    "*",
+    DEFAULT_UID,
+    DEFAULT_GID,
+};
+
+char *grouplist[] = {
+    "user",
+    0
+};
+
+struct group {
+    char *gr_name;
+    char *gr_passwd;
+    int gr_gid;
+    char **gr_mem;
+} default_group = {
+    "user",
+    "*",
+    DEFAULT_GID,
+    &grouplist,
+};
 
 /* #ifndef because can be given in makefile */
 #ifndef DEFAULTLOG
@@ -112,9 +137,6 @@ int	useringroup(User*, User*);
 
 Qid	stat2qid(struct stat*);
 
-void	getfcallold(int, Fcall*, int);
-void	putfcallold(int, Fcall*);
-
 char	Eauth[] =	"authentication failed";
 char	Ebadfid[] =	"fid unknown or out of range";
 char	Ebadoffset[] =	"bad offset in directory read";
@@ -143,17 +165,13 @@ int	devallowed;
 char*	autharg;
 char*	defaultuser;
 char	hostname[256];
-char	remotehostname[256];
 int	chatty9p = 0;
-int	network = 1;
-int	old9p = -1;
+int	network = 0;
 int	authed;
 char*	root;
 User*	none;
 
 Auth *authmethods[] = {	/* first is default */
-	&authrhosts,
-	&authp9any,
 	&authnone,
 };
 
@@ -218,32 +236,6 @@ getfcallnew(int fd, Fcall *fc, int have)
 }
 
 void
-getfcallold(int fd, Fcall *fc, int have)
-{
-	int len, n;
-
-	if(have > 3)
-		sysfatal("cannot happen");
-
-	if(have < 3 && readn(fd, rxbuf, 3-have) != 3-have)
-		sysfatal("couldn't read message");
-
-	len = oldhdrsize(rxbuf[0]);
-	if(len < 3)
-		sysfatal("bad message %d", rxbuf[0]);
-	if(len > 3 && readn(fd, rxbuf+3, len-3) != len-3)
-		sysfatal("couldn't read message");
-
-	n = iosize(rxbuf);
-	if(readn(fd, rxbuf+len, n) != n)
-		sysfatal("couldn't read message");
-	len += n;
-
-	if(convM2Sold(rxbuf, len, fc) != len)
-		sysfatal("badly sized message type %d", rxbuf[0]);
-}
-
-void
 putfcallnew(int wfd, Fcall *tx)
 {
 	uint n;
@@ -255,41 +247,9 @@ putfcallnew(int wfd, Fcall *tx)
 }
 
 void
-putfcallold(int wfd, Fcall *tx)
-{
-	uint n;
-
-	if((n = convS2Mold(tx, txbuf, msize)) == 0)
-		sysfatal("couldn't format message type %d", tx->type);
-	if(write(wfd, txbuf, n) != n)
-		sysfatal("couldn't send message");
-}
-
-void
 getfcall(int fd, Fcall *fc)
 {
-	if(old9p == 1){
-		getfcallold(fd, fc, 0);
-		return;
-	}
-	if(old9p == 0){
-		getfcallnew(fd, fc, 0);
-		return;
-	}
-
-	/* auto-detect */
-	if(readn(fd, rxbuf, 3) != 3)
-		sysfatal("couldn't read message");
-
-	/* is it an old (9P1) message? */
-	if(50 <= rxbuf[0] && rxbuf[0] <= 87 && (rxbuf[0]&1)==0 && GBIT16(rxbuf+1) == 0xFFFF){
-		old9p = 1;
-		getfcallold(fd, fc, 3);
-		return;
-	}
-
-	getfcallnew(fd, fc, 3);
-	old9p = 0;
+    getfcallnew(fd, fc, 0);
 }
 
 void
@@ -371,7 +331,7 @@ serve(int rfd, int wfd)
 		if(chatty9p)
 			fprint(2, "-> %F\n", &tx);
 
-		(old9p ? putfcallold : putfcallnew)(wfd, &tx);
+		putfcallnew(wfd, &tx);
 	}
 }
 
@@ -705,7 +665,7 @@ void
 stat2dir(char *path, struct stat *st, Dir *d)
 {
 	User *u;
-	char *q, *p, *npath;
+	char *q;
 
 	memset(d, 0, sizeof(*d));
 	d->qid = stat2qid(st);
@@ -798,7 +758,7 @@ rread(Fcall *rx, Fcall *tx)
 			}
 			free(path);
 			stat2dir(fid->dirent->d_name, &st, &d);
-			if((n=(old9p ? convD2Mold : convD2M)(&d, p, ep-p)) <= BIT16SZ)
+			if((n=convD2M(&d, p, ep-p)) <= BIT16SZ)
 				break;
 			p += n;
 			fid->dirent = nil;
@@ -910,7 +870,7 @@ rstat(Fcall *rx, Fcall *tx)
 	}
 
 	stat2dir(fid->path, &fid->st, &d);
-	if((tx->nstat=(old9p ? convD2Mold : convD2M)(&d, tx->stat, msize)) <= BIT16SZ)
+	if((tx->nstat=convD2M(&d, tx->stat, msize)) <= BIT16SZ)
 		seterror(tx, "convD2M fails");
 }
 
@@ -935,7 +895,7 @@ rwstat(Fcall *rx, Fcall *tx)
 	 * one works, we're screwed.  in such cases we leave things
 	 * half broken and return an error.  it's hardly perfect.
 	 */
-	if((old9p ? convM2Dold : convM2D)(rx->stat, rx->nstat, &d, (char*)rx->stat) <= BIT16SZ){
+	if(convM2D(rx->stat, rx->nstat, &d, (char*)rx->stat) <= BIT16SZ){
 		seterror(tx, Ewstatbuffer);
 		return;
 	}
@@ -1118,31 +1078,31 @@ uname2user(char *name)
 {
 	int i;
 	User *u;
-	struct passwd *p;
 
 	for(i=0; i<nelem(utab); i++)
 		for(u=utab[i]; u; u=u->next)
 			if(strcmp(u->name, name) == 0)
 				return u;
 
-	if((p = getpwnam(name)) == nil)
-		return nil;
-	return adduser(p);
+        if (!strcmp(name, "user")) {
+            return adduser(&default_user);
+        }
+        return nil;
 }
 
 User*
 uid2user(int id)
 {
 	User *u;
-	struct passwd *p;
 
 	for(u=utab[id%nelem(utab)]; u; u=u->next)
 		if(u->id == id)
 			return u;
 
-	if((p = getpwuid(id)) == nil)
-		return nil;
-	return adduser(p);
+        if (id == 0) {
+            return adduser(&default_user);
+        }
+        return nil;
 }
 
 User*
@@ -1150,31 +1110,31 @@ gname2user(char *name)
 {
 	int i;
 	User *u;
-	struct group *g;
 
 	for(i=0; i<nelem(gtab); i++)
 		for(u=gtab[i]; u; u=u->next)
 			if(strcmp(u->name, name) == 0)
 				return u;
 
-	if((g = getgrnam(name)) == nil)
-		return nil;
-	return addgroup(g);
+        if (!strcmp(name, "user")) {
+            return addgroup(&default_group);
+        }
+        return nil;
 }
 
 User*
 gid2user(int id)
 {
 	User *u;
-	struct group *g;
 
 	for(u=gtab[id%nelem(gtab)]; u; u=u->next)
 		if(u->id == id)
 			return u;
 
-	if((g = getgrgid(id)) == nil)
-		return nil;
-	return addgroup(g);
+        if (id == 0)  {
+            return addgroup(&default_group);
+        }
+        return nil;
 }
 
 void
@@ -1378,34 +1338,7 @@ fidstat(Fid *fid, char **ep)
 int
 userchange(User *u, char **ep)
 {
-	if(defaultuser)
-		return 0;
-
-	if(setreuid(0, 0) < 0){
-		fprint(2, "setreuid(0, 0) failed\n");
-		*ep = "cannot setuid back to root";
-		return -1;
-	}
-
-	/*
-	 * Initgroups does not appear to be SUSV standard.
-	 * But it exists on SGI and on Linux, which makes me
-	 * think it's standard enough.  We have to do something
-	 * like this, and the closest other function I can find is
-	 * setgroups (which initgroups eventually calls).
-	 * Setgroups is the same as far as standardization though,
-	 * so we're stuck using a non-SUSV call.  Sigh.
-	 */
-	if(initgroups(u->name, u->defaultgid) < 0)
-		fprint(2, "initgroups(%s) failed: %s\n", u->name, strerror(errno));
-
-	if(setreuid(-1, u->id) < 0){
-		fprint(2, "setreuid(-1, %s) failed\n", u->name);
-		*ep = strerror(errno);
-		return -1;
-	}
-
-	return 0;
+    return 0;
 }
 
 /*
@@ -1429,16 +1362,6 @@ groupchange(User *u, User *g, char **ep)
 		*ep = Enotingroup;
 		return -1;
 	}
-
-	setreuid(0,0);
-	if(setregid(-1, g->id) < 0){
-		fprint(2, "setegid(%s/%d) failed in groupchange\n", g->name, g->id);
-		*ep = strerror(errno);
-		return -1;
-	}
-	if(userchange(u, ep) < 0)
-		return -1;
-
 	return 0;
 }
 
@@ -1687,26 +1610,6 @@ usercreate(Fid *fid, char *elem, int omode, long perm, char **ep)
 		}
 	}
 
-	/*
-	 * Change ownership if a default user is specified.
-	 */
-	if(defaultuser)
-	if((u = uname2user(defaultuser)) == nil
-	|| chown(npath, u->id, -1) < 0){
-		fprint(2, "chown after create on %s failed\n", npath);
-		remove(npath);	/* race */
-		free(npath);
-		fid->path = opath;
-		if(fid->fd >= 0){
-			close(fid->fd);
-			fid->fd = -1;
-		}else{
-			closedir(fid->dir);
-			fid->dir = nil;
-		}
-		return -1;
-	}
-
 	opath = fid->path;
 	fid->path = estrpath(opath, elem, 1);
 	if(fidstat(fid, ep) < 0){
@@ -1741,58 +1644,14 @@ userremove(Fid *fid, char **ep)
 	return 0;
 }
 
-void
-usage(void)
-{
-	fprint(2, "usage: u9fs [-Dnz] [-a authmethod] [-m msize] [-u user] [root]\n");
-	exit(1);
-}
-
 int
-main(int argc, char **argv)
+init_u9fs(char *user_root)
 {
-	char *authtype;
-	int i;
-	int fd;
 	int logflag;
-
+        int fd;
+	chatty9p = 1;
 	auth = authmethods[0];
 	logflag = O_WRONLY|O_APPEND|O_CREAT;
-	ARGBEGIN{
-	case 'D':
-		chatty9p = 1;
-		break;
-	case 'a':
-		authtype = EARGF(usage());
-		auth = nil;
-		for(i=0; i<nelem(authmethods); i++)
-			if(strcmp(authmethods[i]->name, authtype)==0)
-				auth = authmethods[i];
-		if(auth == nil)
-			sysfatal("unknown auth type '%s'", authtype);
-		break;
-	case 'A':
-		autharg = EARGF(usage());
-		break;
-	case 'l':
-		logfile = EARGF(usage());
-		break;
-	case 'm':
-		msize = strtol(EARGF(usage()), 0, 0);
-		break;
-	case 'n':
-		network = 0;
-		break;
-	case 'u':
-		defaultuser = EARGF(usage());
-		break;
-	case 'z':
-		logflag |= O_TRUNC;
-	}ARGEND
-
-	if(argc > 1)
-		usage();
-
 	fd = open(logfile, logflag, 0666);
 	if(fd < 0)
 		sysfatal("cannot open log '%s'", logfile);
@@ -1812,19 +1671,16 @@ main(int argc, char **argv)
 	txbuf = emalloc(msize);
 	databuf = emalloc(msize);
 
+        defaultuser = "user";
+        
 	if(auth->init)
 		auth->init();
 
-	if(network)
-		getremotehostname(remotehostname, sizeof remotehostname);
-
-	if(gethostname(hostname, sizeof hostname) < 0)
-		strcpy(hostname, "gnot");
+        strcpy(hostname, "gnot");
 
 	umask(0);
 
-	if(argc == 1)
-		root = argv[0];
+        root = user_root;
 
 	none = uname2user("none");
 	if(none == nil)
