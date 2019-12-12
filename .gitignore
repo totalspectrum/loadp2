@@ -1,4 +1,6 @@
 *.bin
 *.exe
+*.zip
 build
 build-win32
+build-macosx
