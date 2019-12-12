@@ -116,7 +116,7 @@ promptexit(int r)
 static void Usage(void)
 {
 printf("\
-loadp2 - a loader for the propeller 2 - version 0.033 2019-12-05\n\
+loadp2 - a loader for the propeller 2 - version 0.034 2019-12-13\n\
 usage: loadp2\n\
          [ -p port ]               serial port\n\
          [ -b baud ]               user baud rate (default is %d)\n\
@@ -130,6 +130,7 @@ usage: loadp2\n\
          [ -k ]                    wait for user input before exit\n\
          [ -q ]                    quiet mode: also checks for exit sequence\n\
          [ -n ]                    no reset; skip any hardware reset\n\
+         [ -9 dir ]                serve 9p remote filesystem from dir\n\
          [ -? ]                    display a usage message and exit\n\
          [ -xDEBUG ]               enter ROM debug monitor\n\
          [ -xTAQOZ ]               enter ROM version of TAQOZ\n\
@@ -768,7 +769,8 @@ int main(int argc, char **argv)
     char *fname = 0;
     char *port = 0;
     int address = 0;
-
+    char *u9root = 0;
+    
     // Parse the command-line parameters
     for (i = 1; i < argc; i++)
     {
@@ -889,6 +891,15 @@ int main(int argc, char **argv)
             {
                 Usage();
             }
+            else if (argv[i][1] == '9')
+            {
+                if(argv[i][2])
+                    u9root = &argv[i][2];
+                else if (++i < argc)
+                    u9root = &argv[i][0];
+                else
+                    Usage();
+            }
             else if (!strcmp(argv[i], "-PATCH"))
                 patch_mode = 1;
             else if (!strcmp(argv[i], "-CHIP"))
@@ -992,6 +1003,10 @@ int main(int argc, char **argv)
         }
     }
 
+    if (u9root) {
+        runterm = 1;
+        u9fs_init(u9root);
+    }
     if (runterm || enter_rom || send_script)
     {
         serial_baud(user_baud);

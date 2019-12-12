@@ -444,6 +444,8 @@ void terminal_mode(int check_for_exit, int pst_mode)
                         //printf("exitchar 2: %02x\n", buf[i]);
                         if (buf[i] == 0) {
                           sawexit_valid = 1;
+                        } else if (buf[i] == 1) {
+                            u9fs_process(cnt - (i+1), &buf[i+1]);
                         } else {
                           realbuf[realbytes++] = exit_char;
                           realbuf[realbytes++] = buf[i];

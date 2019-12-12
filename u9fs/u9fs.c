@@ -247,9 +247,14 @@ putfcallnew(int wfd, Fcall *tx)
 }
 
 void
-getfcall(int fd, Fcall *fc)
+getfcall(int fd, Fcall *fc, int nbuf, char *buf)
 {
-    getfcallnew(fd, fc, 0);
+    int have = 0;
+    if (nbuf > 0) {
+        have = nbuf;
+        memcpy((void *)rxbuf, (void *)buf, have);
+    }
+    getfcallnew(fd, fc, have);
 }
 
 void
@@ -268,13 +273,17 @@ isowner(User *u, Fid *f)
 
 
 // handle one u9fs transaction
+// "nbuf" is number of characters already read from the serial,
+// which we will have to fetch before readn
 void
-handle_u9fs(int rfd, int wfd)
+u9fs_process(int nbuf, char *buf)
 {
 	Fcall rx, tx;
-
-	if (1) {
-		getfcall(rfd, &rx);
+        int rfd = 0; // this is a dummy, actually
+        int wfd = 1; // also a dummy
+        
+	if(1) {
+                getfcall(rfd, &rx, nbuf, buf);
 
 		if(chatty9p)
 			fprint(2, "<- %F\n", &rx);
@@ -1645,7 +1654,7 @@ userremove(Fid *fid, char **ep)
 }
 
 int
-init_u9fs(char *user_root)
+u9fs_init(char *user_root)
 {
 	int logflag;
         int fd;
