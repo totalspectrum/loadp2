@@ -15,6 +15,25 @@
 #include "fcall.h"
 #include "u9fs.h"
 
+#ifdef _WIN32
+typedef int uid_t;
+typedef int gid_t;
+#define my_makedir(a, b) mkdir(a)
+ssize_t pread(int fd, void *buf, size_t count, off_t offset)
+{
+    lseek(fd, offset, 0);
+    return read(fd, buf, count);
+}
+ssize_t pwrite(int fd, void *buf, size_t count, off_t offset)
+{
+    lseek(fd, offset, 0);
+    return write(fd, buf, count);
+}
+
+#else
+#define my_makedir(a, b) mkdir(a, b)
+#endif
+
 #define DEFAULT_UID 1
 #define DEFAULT_GID 1
 
@@ -977,7 +996,7 @@ rwstat(Fcall *rx, Fcall *tx)
 			return;
 		}
 	}
-
+#ifdef NEVER
 	if(gid != (gid_t)-1 && gid != fid->st.st_gid){
 		if(chown(opath, (uid_t)-1, gid) < 0){
 			if(chatty9p)
@@ -986,7 +1005,7 @@ rwstat(Fcall *rx, Fcall *tx)
 			return;
 		}
 	}
-
+#endif
 	if(d.name[0]){
 		old = fid->path;
 		dir = estrdup(fid->path);
@@ -1580,7 +1599,7 @@ usercreate(Fid *fid, char *elem, int omode, long perm, char **ep)
 			return -1;
 		}
 		/* race */
-		if(mkdir(npath, perm&0777) < 0){
+		if(my_makedir(npath, perm&0777) < 0){
 			*ep = strerror(errno);
 			free(npath);
 			return -1;
