@@ -18,7 +18,7 @@ begin		hubset	clkmode_			'set up oscillator
 		test	flagbits, #FLAGBIT_ZERO wz
 	if_z	jmp	#skipzero
 		'' zero out memory
-		wrfast	#0,0
+		wrfast	#0,#0
 		mov	pb, ##$7c0000/16
 zeroloop
 		wflong	zeros
