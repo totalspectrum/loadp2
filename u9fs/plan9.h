@@ -193,6 +193,7 @@ struct Dir {
 } Dir;
 
 long readn(int, void*, long);
+long writen(int, void*, long);
 void remotehost(char*, int);
 void sysfatal(char*, ...);
 

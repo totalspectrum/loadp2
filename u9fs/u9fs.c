@@ -44,7 +44,7 @@ struct group {
     "user",
     "*",
     DEFAULT_GID,
-    &grouplist,
+    grouplist,
 };
 
 /* #ifndef because can be given in makefile */
@@ -242,7 +242,7 @@ putfcallnew(int wfd, Fcall *tx)
 
 	if((n = convS2M(tx, txbuf, msize)) == 0)
 		sysfatal("couldn't format message type %d", tx->type);
-	if(write(wfd, txbuf, n) != n)
+	if(writen(wfd, txbuf, n) != n)
 		sysfatal("couldn't send message");
 }
 
@@ -267,12 +267,13 @@ isowner(User *u, Fid *f)
 
 
 
+// handle one u9fs transaction
 void
-serve(int rfd, int wfd)
+handle_u9fs(int rfd, int wfd)
 {
 	Fcall rx, tx;
 
-	for(;;){
+	if (1) {
 		getfcall(rfd, &rx);
 
 		if(chatty9p)
@@ -1538,7 +1539,6 @@ usercreate(Fid *fid, char *elem, int omode, long perm, char **ep)
 	int o, m;
 	char *opath, *npath, *rpath;
 	struct stat st, parent;
-	User *u;
 
 	rpath = rootpath(fid->path);
 	if(stat(rpath, &parent) < 0){
@@ -1686,6 +1686,5 @@ init_u9fs(char *user_root)
 	if(none == nil)
 		none = uname2user("nobody");
 
-	serve(0, 1);
 	return 0;
 }
