@@ -238,22 +238,29 @@ getfcallnew(int fd, Fcall *fc, int have)
         int totallen;
         
         if(have < BIT32SZ) {
-            if(readn(fd, rxbuf+have, BIT32SZ-have) != BIT32SZ-have)
+            if(readn(fd, rxbuf+have, BIT32SZ-have) != BIT32SZ-have) {
 		sysfatal("couldn't read message");
+                return;
+            }
             have = BIT32SZ;
         }
 
 	totallen = GBIT32(rxbuf);
-	if(totallen <= BIT32SZ)
+	if(totallen <= BIT32SZ) {
 		sysfatal("bogus message");
-
-	len = totallen - have;
-        if (len >= 0) {
-            if(readn(fd, rxbuf+have, len) != len)
-		sysfatal("short message");
+                return;
         }
-	if(convM2S(rxbuf, totallen, fc) != totallen)
+	len = totallen - have;
+        if (len > 0) {
+            if(readn(fd, rxbuf+have, len) != len) {
+		sysfatal("short message");
+                return;
+            }
+        }
+	if(convM2S(rxbuf, totallen, fc) != totallen) {
 		sysfatal("badly sized message type %d", rxbuf[0]);
+                return;
+        }
 }
 
 void
@@ -261,10 +268,14 @@ putfcallnew(int wfd, Fcall *tx)
 {
 	uint n;
 
-	if((n = convS2M(tx, txbuf, msize)) == 0)
+	if((n = convS2M(tx, txbuf, msize)) == 0) {
 		sysfatal("couldn't format message type %d", tx->type);
-	if(writen(wfd, txbuf, n) != n)
+                return;
+        }
+	if(writen(wfd, txbuf, n) != n) {
 		sysfatal("couldn't send message");
+                return;
+        }
 }
 
 void
@@ -1181,7 +1192,7 @@ sysfatal(char *fmt, ...)
 	va_end(va);
 	fprint(2, "u9fs: %s\n", buf);
 	fprint(2, "last unix error: %s\n", strerror(errno));
-	exit(1);
+//	exit(1);
 }
 
 void*
@@ -1192,8 +1203,10 @@ emalloc(size_t n)
 	if(n == 0)
 		n = 1;
 	p = malloc(n);
-	if(p == 0)
+	if(p == 0) {
 		sysfatal("malloc(%ld) fails", (long)n);
+                exit(1);
+        }
 	memset(p, 0, n);
 	return p;
 }
@@ -1205,8 +1218,10 @@ erealloc(void *p, size_t n)
 		p = malloc(n);
 	else
 		p = realloc(p, n);
-	if(p == 0)
+	if(p == 0) {
 		sysfatal("realloc(..., %ld) fails", (long)n);
+                exit(1);
+        }
 	return p;
 }
 
@@ -1214,8 +1229,10 @@ char*
 estrdup(char *p)
 {
 	p = strdup(p);
-	if(p == 0)
+	if(p == 0) {
 		sysfatal("strdup(%.20s) fails", p);
+                exit(1);
+        }
 	return p;
 }
 
