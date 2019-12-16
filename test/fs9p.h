@@ -29,9 +29,9 @@ enum {
     Rclunk,
 };
 
-// maximum length we're willing to receive from host
-// we actually want to allow long read/write messages for
-// efficiency, so let's allow up to 64K
-#define MAXLEN 65536
+// maximum length we're willing to send/receive from host
+// write: 4 + 1 + 2 + 4 + 8 + 4 + 1024 = 1048
+
+#define MAXLEN 1048
 
 #endif

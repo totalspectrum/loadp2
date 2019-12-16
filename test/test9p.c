@@ -13,38 +13,48 @@ typedef struct fsfile {
 } fs_file;
 
 int maxlen = MAXLEN;
+static uint8_t txbuf[MAXLEN];
 
-// send 1 byte to the host
-void doSend1(unsigned x) {
-    ser.tx(x);
-}
-
-// send a special signal to the host to switch to 9P mode
-void doSendHeader(void) {
-    doSend1(0xff);
-    doSend1(0x01);
+// command to put 1 byte in the host buffer
+uint8_t *doPut1(uint8_t *ptr, unsigned x) {
+    *ptr++ = x;
+    return ptr;
 }
 
 // send a 16 bit integer to the host
-void doSend2(unsigned x) {
-    doSend1(x & 0xff);
-    doSend1((x>>8) & 0xff);
+uint8_t *doPut2(uint8_t *ptr, unsigned x) {
+    ptr = doPut1(ptr, x & 0xff);
+    ptr = doPut1(ptr, (x>>8) & 0xff);
+    return ptr;
 }
-
 // send a 32 bit integer to the host
-void doSend4(unsigned x) {
-    doSend1(x & 0xff);
-    doSend1((x>>8) & 0xff);
-    doSend1((x>>16) & 0xff);
-    doSend1((x>>24) & 0xff);
+uint8_t *doPut4(uint8_t *ptr, unsigned x) {
+    ptr = doPut1(ptr, x & 0xff);
+    ptr = doPut1(ptr, (x>>8) & 0xff);
+    ptr = doPut1(ptr, (x>>16) & 0xff);
+    ptr = doPut1(ptr, (x>>24) & 0xff);
+    return ptr;
 }
 
-void doSendStr(const char *s) {
+uint8_t *doPutStr(uint8_t *ptr, const char *s) {
     unsigned L = strlen(s);
     unsigned i = 0;
-    doSend2(L);
+    ptr = doPut2(ptr, L);
     for (i = 0; i < L; i++) {
-        doSend1(*s++);
+        *ptr++ = *s++;
+    }
+    return ptr;
+}
+
+// send a special signal to the host to switch to 9P mode
+void doSendBuffer(uint8_t *startbuf, uint8_t *endbuf) {
+    uint32_t len = endbuf - startbuf;
+    doPut4(startbuf, len);
+    ser.tx(0xff);
+    ser.tx(0x01);
+    while (len>0) {
+        ser.tx(*startbuf++);
+        --len;
     }
 }
 
@@ -58,15 +68,6 @@ unsigned int doGet1()
     return c;
 }
 
-// receive an unsigned short
-unsigned doGet2()
-{
-    unsigned r;
-    r = doGet1();
-    r = r | (doGet1() << 8);
-    return r;
-}
-
 // receive an unsigned long
 unsigned doGet4()
 {
@@ -78,24 +79,16 @@ unsigned doGet4()
     return r;
 }
 
-int getResponseHeader(uint8_t *buf, int maxlen)
+int getResponse(uint8_t *buf, int maxlen)
 {
-    int len = doGet4();
-    int left = len - 4;
+    int len = doGet4() - 4;
+    int left = len;
     int i = 0;
     while (left > 0 && i < maxlen) {
         buf[i++] = doGet1();
         --left;
     }
-    return left;
-}
-
-void skipLeft(int left)
-{
-    while (left > 0) {
-        doGet1();
-        --left;
-    }
+    return len;
 }
 
 static unsigned FETCH2(uint8_t *b)
@@ -123,37 +116,38 @@ fs_file rootdir;
 // returns 0 on success, -1 on failure
 int fs_init()
 {
-    int size = 4 + 1 + 2 + 4 + 2 + 6;
-    static uint8_t buf[20];
-    int remain;
+    uint8_t *ptr;
+    uint32_t size;
+    int len;
     unsigned msize;
     unsigned s;
     unsigned tag;
-    
-    doSendHeader();
-    doSend4(size);
-    doSend1(Tversion);
-    doSend2(NOTAG);
-    doSend4(MAXLEN);
-    doSendStr("9P2000");
 
-    remain = getResponseHeader(buf, sizeof(buf));
-    skipLeft(remain);
-    
-    if (buf[0] != Rversion) {
+    ptr = doPut4(txbuf, 0);
+    ptr = doPut1(ptr, Tversion);
+    ptr = doPut2(ptr, NOTAG);
+    ptr = doPut4(ptr, MAXLEN);
+    ptr = doPutStr(ptr, "9P2000");
+    doSendBuffer(txbuf, ptr);
+
+    ptr = txbuf;
+    len = getResponse(ptr, MAXLEN);
+
+    if (ptr[0] != Rversion) {
         ser.printf("No version response from host\n");
-        ser.printf("remain=%x buf[] = %x %x %x %x ",
-                   remain, buf[0], buf[1], buf[2], buf[3]);
+        ser.printf("len=%x buf[] = %x %x %x %x ",
+                   len, ptr[0], ptr[1], ptr[2], ptr[3]);
         ser.printf(" %x %x %x %x\n",
-                   buf[4], buf[5], buf[6], buf[7]);
+                   ptr[4], ptr[5], ptr[6], ptr[7]);
         return -1;
     }
-    tag = FETCH2(&buf[1]);
-    msize = FETCH4(&buf[3]);
+    
+    tag = FETCH2(ptr+1);
+    msize = FETCH4(ptr+3);
 
-    s = FETCH2(&buf[7]);
-    if (s != 6 || 0 != strncmp(&buf[9], "9P2000")) {
-        ser.printf("Bad version response from host: s=%d ver=%s\n", s, &buf[9]);
+    s = FETCH2(ptr+7);
+    if (s != 6 || 0 != strncmp(&ptr[9], "9P2000")) {
+        ser.printf("Bad version response from host: s=%d ver=%s\n", s, &ptr[9]);
         return -1;
     }
     if (msize < 64 || msize > MAXLEN) {
@@ -163,21 +157,18 @@ int fs_init()
     maxlen = msize;
 
     // OK, try to attach
-    size = 4 + 1 + 2 + 4 + 4 + 2 + strlen("user") + 2 + 0;
-    doSendHeader();
-    doSend4(size);
-    doSend1(Tattach);
-    doSend2(NOTAG);  // not sure about this one...
-    doSend4((uint32_t)&rootdir); // our FID
-    doSend4(NOFID); // no authorization requested
-    doSendStr("user");
-    doSendStr(""); // no aname
-
-    remain = getResponseHeader(buf, sizeof(buf));
-    if (remain > 0) {
-        skipLeft(remain);
-    }
-    if (buf[0] != Rattach) {
+    ptr = doPut4(txbuf, 0);  // space for size
+    ptr = doPut1(ptr, Tattach);
+    ptr = doPut2(ptr, NOTAG);  // not sure about this one...
+    ptr = doPut4(ptr, (uint32_t)&rootdir); // our FID
+    ptr = doPut4(ptr, NOFID); // no authorization requested
+    ptr = doPutStr(ptr, "user");
+    ptr = doPutStr(ptr, ""); // no aname
+    doSendBuffer(txbuf, ptr);
+    
+    ptr = txbuf;
+    len = getResponse(txbuf, MAXLEN);
+    if (ptr[0] != Rattach) {
         ser.printf("Unable to attach\n");
         return -1;
     }
