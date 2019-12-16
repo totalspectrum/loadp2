@@ -46,18 +46,6 @@ uint8_t *doPutStr(uint8_t *ptr, const char *s) {
     return ptr;
 }
 
-// send a special signal to the host to switch to 9P mode
-void doSendBuffer(uint8_t *startbuf, uint8_t *endbuf) {
-    uint32_t len = endbuf - startbuf;
-    doPut4(startbuf, len);
-    ser.tx(0xff);
-    ser.tx(0x01);
-    while (len>0) {
-        ser.tx(*startbuf++);
-        --len;
-    }
-}
-
 // receive 1 byte
 unsigned int doGet1()
 {
@@ -79,13 +67,26 @@ unsigned doGet4()
     return r;
 }
 
-int getResponse(uint8_t *buf, int maxlen)
+// send a buffer to the host
+// then receive a reply
+int sendRecv(uint8_t *startbuf, uint8_t *endbuf)
 {
-    int len = doGet4() - 4;
-    int left = len;
+    int len = endbuf - startbuf;
+    uint8_t *buf = startbuf;
     int i = 0;
+    int left;
+    
+    doPut4(startbuf, len);
+    ser.tx(0xff);
+    ser.tx(0x01);
+    while (len>0) {
+        ser.tx(*buf++);
+        --len;
+    }
+    len = doGet4() - 4;
+    left = len;
     while (left > 0 && i < maxlen) {
-        buf[i++] = doGet1();
+        startbuf[i++] = doGet1();
         --left;
     }
     return len;
@@ -128,10 +129,9 @@ int fs_init()
     ptr = doPut2(ptr, NOTAG);
     ptr = doPut4(ptr, MAXLEN);
     ptr = doPutStr(ptr, "9P2000");
-    doSendBuffer(txbuf, ptr);
+    len = sendRecv(txbuf, ptr);
 
     ptr = txbuf;
-    len = getResponse(ptr, MAXLEN);
 
     if (ptr[0] != Rversion) {
         ser.printf("No version response from host\n");
@@ -164,14 +164,77 @@ int fs_init()
     ptr = doPut4(ptr, NOFID); // no authorization requested
     ptr = doPutStr(ptr, "user");
     ptr = doPutStr(ptr, ""); // no aname
-    doSendBuffer(txbuf, ptr);
+
+    len = sendRecv(txbuf, ptr);
     
     ptr = txbuf;
-    len = getResponse(txbuf, MAXLEN);
     if (ptr[0] != Rattach) {
         ser.printf("Unable to attach\n");
         return -1;
     }
+    return 0;
+}
+
+// walk from fid "dir" along path, creating fid "newfile"
+int fs_walk(fs_file *dir, fs_file *newfile, char *path)
+{
+    uint8_t *ptr;
+    uint8_t *sizeptr;
+    int c;
+    uint32_t curdir = (uint32_t) dir;
+    int len;
+    int r;
+    
+    do {
+        ptr = doPut4(txbuf, 0); // space for size
+        ptr = doPut1(ptr, Twalk);
+        ptr = doPut2(ptr, NOTAG);
+        ptr = doPut4(ptr, curdir);
+        curdir = (uint32_t)newfile;
+        ptr = doPut4(ptr, curdir);
+        while (*path == '/') path++;
+        len = ptr - txbuf;
+        if (*path) {
+            ptr = doPut2(ptr, 1); // nwname
+            sizeptr = ptr;
+            ptr = doPut2(ptr, 0);
+            while (*path && *path != '/' && len < maxlen) {
+                *ptr++ = *path++;
+                len++;
+            }
+            doPut2(sizeptr, (uint32_t)(ptr - (sizeptr+2)));
+        } else {
+            ptr = doPut2(ptr, 0);
+        }
+
+        r = sendRecv(txbuf, ptr);
+        if (txbuf[0] != Rwalk) {
+            return -1;
+        }
+    } while (*path);
+    return 0;
+}
+
+fs_file testfile;
+
+int fs_open(fs_file *f, char *path, int fs_mode)
+{
+    int r;
+    uint8_t *ptr;
+    uint8_t mode = 0;
+    
+    r = fs_walk(&rootdir, f, path);
+    if (r != 0) return r;
+    ptr = doPut4(txbuf, 0); // space for size
+    ptr = doPut1(ptr, Topen);
+    ptr = doPut2(ptr, NOTAG);
+    ptr = doPut4(ptr, (uint32_t)f);
+    ptr = doPut1(ptr, mode);
+    r = sendRecv(txbuf, ptr);
+    if (txbuf[0] != Ropen) {
+        return -1;
+    }
+    f->offset = 0;
     return 0;
 }
 
@@ -184,6 +247,13 @@ int main()
     ser.printf("9p test program...\n");
     ser.printf("Initializing...\n");
     r = fs_init();
-    ser.printf("Init returned %d\n", r);
+//    ser.printf("Init returned %d\n", r);
+//    pausems(1000);
+    if (r == 0) {
+        r = fs_open(&testfile, (char *)"fs9p.h", 0);
+        ser.printf("fs_open returned %d\n", r);
+    }
+    if (r == 0) {
+    }
     return 0;
 }

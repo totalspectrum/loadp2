@@ -236,6 +236,7 @@ getfcallnew(int fd, Fcall *fc, int have)
 {
 	int len;
         int totallen;
+        int r;
         
         if(have < BIT32SZ) {
             if(readn(fd, rxbuf+have, BIT32SZ-have) != BIT32SZ-have) {
@@ -250,16 +251,16 @@ getfcallnew(int fd, Fcall *fc, int have)
 		sysfatal("bogus message");
                 return;
         }
-	len = totallen - have;
+	len = totallen - have; // bytes left to read
         if (len > 0) {
             if(readn(fd, rxbuf+have, len) != len) {
 		sysfatal("short message");
                 return;
             }
         }
-	if(convM2S(rxbuf, totallen, fc) != totallen) {
-		sysfatal("badly sized message type %d", rxbuf[0]);
-                return;
+	if( (r = convM2S(rxbuf, totallen, fc)) != totallen) {
+            sysfatal("badly sized message type %d: expected %d got %d", rxbuf[0], totallen, r);
+            return;
         }
 }
 
