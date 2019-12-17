@@ -392,7 +392,7 @@ void msleep(int ms)
 /**
  * simple terminal emulator
  */
-void terminal_mode(int check_for_exit, int pst_mode)
+void terminal_mode(int runterm_mode, int pst_mode)
 {
     struct termios oldt, newt;
     char buf[128], realbuf[256]; // double in case buf is filled with \r in PST mode
@@ -403,7 +403,9 @@ void terminal_mode(int check_for_exit, int pst_mode)
     int sawexit_valid = 0; 
     int exitcode = 0;
     int continue_terminal = 1;
-
+    int check_for_exit = runterm_mode != 0;
+    int check_for_files = runterm_mode & 2;
+    
     if (isatty(STDIN_FILENO)) {
         tcgetattr(STDIN_FILENO, &oldt);
         newt = oldt;
@@ -444,7 +446,7 @@ void terminal_mode(int check_for_exit, int pst_mode)
                         //printf("exitchar 2: %02x\n", buf[i]);
                         if (buf[i] == 0) {
                           sawexit_valid = 1;
-                        } else if (buf[i] == 1) {
+                        } else if (buf[i] == 1 && check_for_files) {
                             int r = u9fs_process(cnt - (i+1), &buf[i+1]);
                             i += (r-1);
                             sawexit_char = 0;

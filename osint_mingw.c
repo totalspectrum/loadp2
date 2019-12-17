@@ -320,13 +320,15 @@ void EnableVTMode()
  */
 #define EXIT_CHAR   0xff
 
-void terminal_mode(int check_for_exit, int pst_mode)
+void terminal_mode(int runterm_mode, int pst_mode)
 {
     int sawexit_char = 0;
     int sawexit_valid = 0;
     int exitcode = 0;
     int continue_terminal = 1;
-
+    int check_for_exit = runterm_mode != 0;
+    int check_for_files = runterm_mode & 2;
+    
     EnableVTMode();
     while (continue_terminal) {
         uint8_t buf[1];
@@ -338,7 +340,7 @@ void terminal_mode(int check_for_exit, int pst_mode)
             else if (sawexit_char) {
                 if (buf[0] == 0) {
                     sawexit_valid = 1;
-                } else if (buf[0] == 1) {
+                } else if (buf[0] == 1 && check_for_files) {
                     (void)u9fs_process(0, (char *)&buf[0]);
                     sawexit_char = 0;
                     break;

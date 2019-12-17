@@ -1004,7 +1004,7 @@ int main(int argc, char **argv)
     }
 
     if (u9root) {
-        runterm = 1;
+        runterm = 3;
         u9fs_init(u9root);
     }
     if (runterm || enter_rom || send_script)
@@ -1027,7 +1027,7 @@ int main(int argc, char **argv)
             if (!quiet_mode) {
                 printf("( Entering terminal mode.  Press Ctrl-] to exit. )\n");
             }
-            terminal_mode(1,pstmode);
+            terminal_mode(runterm, pstmode);
             if (!quiet_mode) {
                 waitAtExit = 0; // no need to wait, user explicitly quit
             }
