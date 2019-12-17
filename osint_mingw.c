@@ -338,8 +338,11 @@ void terminal_mode(int check_for_exit, int pst_mode)
             else if (sawexit_char) {
                 if (buf[0] == 0) {
                     sawexit_valid = 1;
-                }
-                else {
+                } else if (buf[0] == 1) {
+                    (void)u9fs_process(0, (char *)&buf[0]);
+                    sawexit_char = 0;
+                    break;
+                } else {
                     putchar(EXIT_CHAR);
                     putchar(buf[0]);
                     fflush(stdout);

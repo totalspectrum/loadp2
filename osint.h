@@ -58,4 +58,8 @@ void msleep(int ms);
 /* fetch elapsed milliseconds since some point in the past */
 unsigned long long elapsedms(void);
 
+/* external filesystem functions in the u9fs/u9fs.c */
+int u9fs_init(char *user_root);
+int u9fs_process(int count, char *buf);
+
 #endif
