@@ -17,6 +17,7 @@ usage: loadp2
          [ -f clkfreq ]            clock frequency (default is 80000000)
          [ -m clkmode ]            clock mode in hex (default is ffffffff)
          [ -s address ]            starting address in hex (default is 0)
+	 [ -9 dir ]                serve 9P file system with root dir
          [ -t ]                    enter terminal mode after running the program
          [ -v ]                    enable verbose mode
          [ -k ]                    wait for user input before exit
@@ -140,6 +141,14 @@ Start upython, pause for 1000 milliseconds, wait for the prompt >>>, then send t
 ```
 loadp2 -b230400 upython.binary -e "pausems(1000) recv(>>> ) send{print('hi')^M}" -t
 ```
+
+## File System Server
+
+`loadp2` has a built in file server, using the Plan 9 protocol (9P). This is a very simple network file system protocol. The file server is activated with the `-9` switch, which takes as argument the directory to use as the root directory of the file system.
+
+File server messages from the device start with the two byte magic escape sequence `0xff`, `0x01`. After that the standard 9P protocol data follows, as described in the Plan 9 manual pages (see http://man.cat-v.org/plan_9/5/). All protocol messages start with a 4 byte message length, followed by the message payload.
+
+See the `testfile` directory for an example of how to use the protocol to read a file from the host on the P2.
 
 ## Compiling loadp2
 

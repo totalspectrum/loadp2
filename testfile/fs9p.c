@@ -249,3 +249,54 @@ int fs_read(fs_file *f, uint8_t *buf, int count)
     }
     return totalread;
 }
+
+int fs_write(fs_file *f, uint8_t *buf, int count)
+{
+    uint8_t *ptr;
+    int totalread = 0;
+    int curcount;
+    int r;
+    int left;
+    uint32_t oldlo;
+    while (count > 0) {
+        ptr = doPut4(txbuf, 0); // space for size
+        ptr = doPut1(ptr, Tread);
+        ptr = doPut2(ptr, NOTAG);
+        ptr = doPut4(ptr, (uint32_t)f);
+        ptr = doPut4(ptr, f->offlo);
+        ptr = doPut4(ptr, f->offhi);
+        left = maxlen - (ptr + 4 - txbuf);
+        if (count < left) {
+            curcount = count;
+        } else {
+            curcount = left;
+        }
+        ptr = doPut4(ptr, curcount);
+        // now copy in the data
+        memcpy(ptr, buf, curcount);
+        r = (*sendRecv)(txbuf, ptr+curcount, maxlen);
+        if (r < 0) return r;
+        ptr = txbuf + 4;
+        if (*ptr++ != Rwrite) {
+            return -1;
+        }
+        ptr += 2; // skip tag
+        r = FETCH4(ptr); ptr += 4;
+        if (r < 0 || r > curcount) {
+            return -1;
+        }
+        if (r == 0) {
+            // EOF reached
+            break;
+        }
+        buf += r;
+        totalread += r;
+        count -= r;
+        oldlo = f->offlo;
+        f->offlo = oldlo + r;
+        if (f->offlo < oldlo) {
+            f->offhi++;
+        }
+    }
+    return totalread;
+}
