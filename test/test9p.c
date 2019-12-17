@@ -9,7 +9,8 @@
 struct __using("spin/SmartSerial") ser;
 
 typedef struct fsfile {
-    unsigned offset;
+    uint32_t offlo;
+    uint32_t offhi;
 } fs_file;
 
 int maxlen = MAXLEN;
@@ -77,6 +78,11 @@ int sendRecv(uint8_t *startbuf, uint8_t *endbuf)
     int left;
     
     doPut4(startbuf, len);
+    if (len <= 4) {
+        ser.printf("HELP!: len=%d\n", len);
+        pausems(1000);
+        for(;;);
+    }
     ser.tx(0xff);
     ser.tx(0x01);
     while (len>0) {
@@ -234,14 +240,82 @@ int fs_open(fs_file *f, char *path, int fs_mode)
     if (txbuf[0] != Ropen) {
         return -1;
     }
-    f->offset = 0;
+    f->offlo = f->offhi = 0;
     return 0;
+}
+
+int fs_close(fs_file *f)
+{
+    uint8_t *ptr;
+    int r;
+    ptr = doPut4(txbuf, 0); // space for size
+    ptr = doPut1(ptr, Tclunk);
+    ptr = doPut2(ptr, NOTAG);
+    ptr = doPut4(ptr, (uint32_t)f);
+    r = sendRecv(txbuf, ptr);
+    if (r < 0 || txbuf[0] != Rclunk) {
+        return -1;
+    }
+    return 0;
+}
+
+int fs_read(fs_file *f, uint8_t *buf, int count)
+{
+    uint8_t *ptr;
+    int totalread = 0;
+    int curcount;
+    int r;
+    int left;
+    uint32_t oldlo;
+    while (count > 0) {
+        ptr = doPut4(txbuf, 0); // space for size
+        ptr = doPut1(ptr, Tread);
+        ptr = doPut2(ptr, NOTAG);
+        ptr = doPut4(ptr, (uint32_t)f);
+        ptr = doPut4(ptr, f->offlo);
+        ptr = doPut4(ptr, f->offhi);
+        left = maxlen - (ptr + 4 - txbuf);
+        if (count < left) {
+            curcount = count;
+        } else {
+            curcount = left;
+        }
+        ptr = doPut4(ptr, curcount);
+        r = sendRecv(txbuf, ptr);
+        if (r < 0) return r;
+        ptr = txbuf;
+        if (*ptr++ != Rread) {
+            ser.printf("No read response\n");
+            return -1;
+        }
+        ptr += 2; // skip tag
+        r = FETCH4(ptr); ptr += 4;
+        if (r < 0 || r > curcount) {
+            ser.printf("read: r=%d\n", r);
+            return -1;
+        }
+        if (r == 0) {
+            // EOF reached
+            break;
+        }
+        memcpy(buf, ptr, r);
+        buf += r;
+        totalread += r;
+        count -= r;
+        oldlo = f->offlo;
+        f->offlo = oldlo + r;
+        if (f->offlo < oldlo) {
+            f->offhi++;
+        }
+    }
+    return totalread;
 }
 
 // test program
 int main()
 {
     int r;
+    char buf[80];
     _clkset(0x010007f8, 160000000);
     ser.start(63, 62, 0, 230400);
     ser.printf("9p test program...\n");
@@ -251,9 +325,23 @@ int main()
 //    pausems(1000);
     if (r == 0) {
         r = fs_open(&testfile, (char *)"fs9p.h", 0);
+        pausems(10);
         ser.printf("fs_open returned %d\n", r);
     }
     if (r == 0) {
+        int i;
+        // read the file and show it
+        ser.printf("FILE CONTENTS:\r\n");
+        pausems(100);
+        do {
+            r = fs_read(&testfile, buf, sizeof(buf));
+            for (i = 0; i < r; i++) {
+                ser.tx(buf[i]);
+            }
+        } while (r > 0);
+        pausems(10);
+        ser.printf("EOF\r\n");
+        fs_close(&testfile);
     }
     return 0;
 }

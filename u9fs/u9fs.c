@@ -231,37 +231,45 @@ rootpath(char *path)
 	return buf;
 }
 
-void
+int
 getfcallnew(int fd, Fcall *fc, int have)
 {
 	int len;
+        int read_from_have;
         int totallen;
         int r;
         
         if(have < BIT32SZ) {
+            read_from_have = have;
             if(readn(fd, rxbuf+have, BIT32SZ-have) != BIT32SZ-have) {
 		sysfatal("couldn't read message");
-                return;
+                return read_from_have;
             }
             have = BIT32SZ;
+        } else {
+            read_from_have = BIT32SZ;
         }
 
 	totallen = GBIT32(rxbuf);
 	if(totallen <= BIT32SZ) {
 		sysfatal("bogus message");
-                return;
+                return read_from_have;
         }
 	len = totallen - have; // bytes left to read
         if (len > 0) {
+            read_from_have = have;
             if(readn(fd, rxbuf+have, len) != len) {
 		sysfatal("short message");
-                return;
+                return read_from_have;
             }
+        } else {
+            read_from_have = totallen;
         }
 	if( (r = convM2S(rxbuf, totallen, fc)) != totallen) {
             sysfatal("badly sized message type %d: expected %d got %d", rxbuf[0], totallen, r);
-            return;
+            return read_from_have;
         }
+        return read_from_have;
 }
 
 void
@@ -279,7 +287,7 @@ putfcallnew(int wfd, Fcall *tx)
         }
 }
 
-void
+int
 getfcall(int fd, Fcall *fc, int nbuf, char *buf)
 {
     int have = 0;
@@ -287,7 +295,7 @@ getfcall(int fd, Fcall *fc, int nbuf, char *buf)
         have = nbuf;
         memcpy((void *)rxbuf, (void *)buf, have);
     }
-    getfcallnew(fd, fc, have);
+    return getfcallnew(fd, fc, have);
 }
 
 void
@@ -308,15 +316,18 @@ isowner(User *u, Fid *f)
 // handle one u9fs transaction
 // "nbuf" is number of characters already read from the serial,
 // which we will have to fetch before readn
-void
+// returns the number of characters read from buf
+
+int
 u9fs_process(int nbuf, char *buf)
 {
 	Fcall rx, tx;
         int rfd = 0; // this is a dummy, actually
         int wfd = 1; // also a dummy
+        int got = 0;
         
 	if(1) {
-                getfcall(rfd, &rx, nbuf, buf);
+                got = getfcall(rfd, &rx, nbuf, buf);
 
 		if(chatty9p)
 			fprint(2, "<- %F\n", &rx);
@@ -376,6 +387,8 @@ u9fs_process(int nbuf, char *buf)
 
 		putfcallnew(wfd, &tx);
 	}
+
+        return got;
 }
 
 void
@@ -1695,7 +1708,7 @@ userremove(Fid *fid, char **ep)
 int
 u9fs_init(char *user_root)
 {
-	chatty9p = 1;
+//	chatty9p = 1;
 	auth = authmethods[0];
 
 #ifdef NEVER       

@@ -60,6 +60,6 @@ unsigned long long elapsedms(void);
 
 /* external filesystem functions in the u9fs/u9fs.c */
 int u9fs_init(char *user_root);
-void u9fs_process(int count, char *buf);
+int u9fs_process(int count, char *buf);
 
 #endif
