@@ -261,7 +261,7 @@ static unsigned long getms()
     QueryPerformanceFrequency(&ticksPerSecond);
     if(ticksPerSecond.QuadPart < 1000) {
         printf("Your system does not meet timer requirement. Try another computer. Exiting program.\n");
-        exit(1);
+        promptexit(1);
     }
     // what time is it?
     QueryPerformanceCounter(&tick);
@@ -294,7 +294,7 @@ static void ShowLastError(void)
         0, NULL);
     printf("    %s\n", (char *)lpMsgBuf);
     LocalFree(lpMsgBuf);
-    exit(1); // exit on error
+    promptexit(1); // exit on error
 }
 
 /* console i/o functions for Unix/Linux courtesy of 'jazzed' */
@@ -398,7 +398,7 @@ void terminal_mode(int check_for_exit, int pst_mode)
     console_restore();
 
     if (check_for_exit && sawexit_valid) {
-      exit(exitcode);
+      promptexit(exitcode);
     }
 }
 

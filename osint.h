@@ -62,4 +62,7 @@ unsigned long long elapsedms(void);
 int u9fs_init(char *user_root);
 int u9fs_process(int count, char *buf);
 
+/* in loadp2.c */
+void promptexit(int status);
+
 #endif

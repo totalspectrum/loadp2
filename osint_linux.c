@@ -163,7 +163,7 @@ static int set_baud(struct termios *sparm, unsigned long baud)
 #endif
             printf("115200, 57600, 38400, 19200, or 9600\n");
             serial_done();
-            exit(2);
+            promptexit(2);
             break;
     }
 
@@ -249,7 +249,7 @@ int serial_baud(unsigned long baud)
         HANDLE oldSerial = hSerial;
         if (!serial_init(last_port, baud)) {
             printf("serial_init of %s failed\n", last_port);
-            exit(1);
+            promptexit(1);
         }
         close(oldSerial);
     }
@@ -491,7 +491,7 @@ done:
 
     if (sawexit_valid)
       {
-        exit(exitcode);
+        promptexit(exitcode);
       }
     
 }
