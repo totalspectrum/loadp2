@@ -77,7 +77,7 @@ int fs_init(sendrecv_func fn)
 
     sendRecv = fn;
     ptr = doPut4(txbuf, 0);
-    ptr = doPut1(ptr, Tversion);
+    ptr = doPut1(ptr, t_version);
     ptr = doPut2(ptr, NOTAG);
     ptr = doPut4(ptr, MAXLEN);
     ptr = doPutStr(ptr, "9P2000");
@@ -85,7 +85,7 @@ int fs_init(sendrecv_func fn)
 
     ptr = txbuf+4;
 
-    if (ptr[0] != Rversion) {
+    if (ptr[0] != r_version) {
         return -1;
     }
     
@@ -105,7 +105,7 @@ int fs_init(sendrecv_func fn)
 
     // OK, try to attach
     ptr = doPut4(txbuf, 0);  // space for size
-    ptr = doPut1(ptr, Tattach);
+    ptr = doPut1(ptr, t_attach);
     ptr = doPut2(ptr, NOTAG);  // not sure about this one...
     ptr = doPut4(ptr, (uint32_t)&rootdir); // our FID
     ptr = doPut4(ptr, NOFID); // no authorization requested
@@ -115,11 +115,16 @@ int fs_init(sendrecv_func fn)
     len = (*sendRecv)(txbuf, ptr, maxlen);
     
     ptr = txbuf+4;
-    if (ptr[0] != Rattach) {
-        ser.printf("Unable to attach\n");
+    if (ptr[0] != r_attach) {
+        //ser.printf("Unable to attach\n");
         return -1;
     }
     return 0;
+}
+
+fs_file *fs_getroot()
+{
+    return &rootdir;
 }
 
 // walk from fid "dir" along path, creating fid "newfile"
@@ -134,7 +139,7 @@ int fs_walk(fs_file *dir, fs_file *newfile, char *path)
     
     do {
         ptr = doPut4(txbuf, 0); // space for size
-        ptr = doPut1(ptr, Twalk);
+        ptr = doPut1(ptr, t_walk);
         ptr = doPut2(ptr, NOTAG);
         ptr = doPut4(ptr, curdir);
         curdir = (uint32_t)newfile;
@@ -155,14 +160,12 @@ int fs_walk(fs_file *dir, fs_file *newfile, char *path)
         }
 
         r = (*sendRecv)(txbuf, ptr, maxlen);
-        if (txbuf[4] != Rwalk) {
+        if (txbuf[4] != r_walk) {
             return -1;
         }
     } while (*path);
     return 0;
 }
-
-fs_file testfile;
 
 int fs_open(fs_file *f, char *path, int fs_mode)
 {
@@ -173,12 +176,12 @@ int fs_open(fs_file *f, char *path, int fs_mode)
     r = fs_walk(&rootdir, f, path);
     if (r != 0) return r;
     ptr = doPut4(txbuf, 0); // space for size
-    ptr = doPut1(ptr, Topen);
+    ptr = doPut1(ptr, t_open);
     ptr = doPut2(ptr, NOTAG);
     ptr = doPut4(ptr, (uint32_t)f);
     ptr = doPut1(ptr, mode);
     r = (*sendRecv)(txbuf, ptr, maxlen);
-    if (txbuf[4] != Ropen) {
+    if (txbuf[4] != r_open) {
         return -1;
     }
     f->offlo = f->offhi = 0;
@@ -190,11 +193,11 @@ int fs_close(fs_file *f)
     uint8_t *ptr;
     int r;
     ptr = doPut4(txbuf, 0); // space for size
-    ptr = doPut1(ptr, Tclunk);
+    ptr = doPut1(ptr, t_clunk);
     ptr = doPut2(ptr, NOTAG);
     ptr = doPut4(ptr, (uint32_t)f);
     r = (*sendRecv)(txbuf, ptr, maxlen);
-    if (r < 0 || txbuf[4] != Rclunk) {
+    if (r < 0 || txbuf[4] != r_clunk) {
         return -1;
     }
     return 0;
@@ -210,7 +213,7 @@ int fs_read(fs_file *f, uint8_t *buf, int count)
     uint32_t oldlo;
     while (count > 0) {
         ptr = doPut4(txbuf, 0); // space for size
-        ptr = doPut1(ptr, Tread);
+        ptr = doPut1(ptr, t_read);
         ptr = doPut2(ptr, NOTAG);
         ptr = doPut4(ptr, (uint32_t)f);
         ptr = doPut4(ptr, f->offlo);
@@ -225,7 +228,7 @@ int fs_read(fs_file *f, uint8_t *buf, int count)
         r = (*sendRecv)(txbuf, ptr, maxlen);
         if (r < 0) return r;
         ptr = txbuf + 4;
-        if (*ptr++ != Rread) {
+        if (*ptr++ != r_read) {
             return -1;
         }
         ptr += 2; // skip tag
@@ -260,7 +263,7 @@ int fs_write(fs_file *f, uint8_t *buf, int count)
     uint32_t oldlo;
     while (count > 0) {
         ptr = doPut4(txbuf, 0); // space for size
-        ptr = doPut1(ptr, Tread);
+        ptr = doPut1(ptr, t_write);
         ptr = doPut2(ptr, NOTAG);
         ptr = doPut4(ptr, (uint32_t)f);
         ptr = doPut4(ptr, f->offlo);
@@ -277,7 +280,7 @@ int fs_write(fs_file *f, uint8_t *buf, int count)
         r = (*sendRecv)(txbuf, ptr+curcount, maxlen);
         if (r < 0) return r;
         ptr = txbuf + 4;
-        if (*ptr++ != Rwrite) {
+        if (*ptr++ != r_write) {
             return -1;
         }
         ptr += 2; // skip tag
