@@ -1028,9 +1028,6 @@ int main(int argc, char **argv)
                 printf("( Entering terminal mode.  Press Ctrl-] to exit. )\n");
             }
             terminal_mode(runterm, pstmode);
-            if (!quiet_mode) {
-                waitAtExit = 0; // no need to wait, user explicitly quit
-            }
         }
     }
 
