@@ -228,6 +228,15 @@ rootpath(char *path)
 	if(root == nil)
 		return path;
 	snprint(buf, sizeof buf, "%s%s", root, path);
+#ifdef _WIN32
+        {
+            char *rpath = strrchr(buf, '/');
+            if (rpath && rpath[1] == 0) {
+                rpath[1] = '.';
+                rpath[2] = 0;
+            }
+        }
+#endif        
 	return buf;
 }
 

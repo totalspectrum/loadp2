@@ -328,7 +328,10 @@ void terminal_mode(int runterm_mode, int pst_mode)
     int continue_terminal = 1;
     int check_for_exit = runterm_mode != 0;
     int check_for_files = runterm_mode & 2;
-    
+
+//    if (check_for_files) {
+//        printf("9P file server enabled\n");
+//    }
     EnableVTMode();
     while (continue_terminal) {
         uint8_t buf[1];
@@ -341,9 +344,9 @@ void terminal_mode(int runterm_mode, int pst_mode)
                 if (buf[0] == 0) {
                     sawexit_valid = 1;
                 } else if (buf[0] == 1 && check_for_files) {
+                    //printf("calling u9fs_process\n");
                     (void)u9fs_process(0, (char *)&buf[0]);
                     sawexit_char = 0;
-                    break;
                 } else {
                     putchar(EXIT_CHAR);
                     putchar(buf[0]);
