@@ -1615,7 +1615,7 @@ usercreate(Fid *fid, char *elem, int omode, long perm, char **ep)
 		*ep = strerror(errno);
 		return -1;
 	}
-
+#ifdef NEVER
 	/*
 	 * Change group so that created file has expected group
 	 * by Plan 9 semantics.  If that fails, might as well go
@@ -1624,7 +1624,8 @@ usercreate(Fid *fid, char *elem, int omode, long perm, char **ep)
 	if(groupchange(fid->u, gid2user(parent.st_gid), ep) < 0
 	&& groupchange(fid->u, gid2user(fid->u->defaultgid), ep) < 0)
 		return -1;
-
+#endif
+        
 	m = (perm & DMDIR) ? 0777 : 0666;
 	perm = perm & (~m | (fid->st.st_mode & m));
 
