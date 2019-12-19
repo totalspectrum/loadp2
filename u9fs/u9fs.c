@@ -1724,8 +1724,8 @@ u9fs_init(char *user_root)
 			sysfatal("cannot dup fd onto stderr");
 		close(fd);
 	}
-#endif        
 	fprint(2, "u9fs\nkill %d\n", (int)getpid());
+#endif        
 
 	fmtinstall('F', fcallconv);
 	fmtinstall('D', dirconv);
