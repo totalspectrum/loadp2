@@ -1,4 +1,4 @@
-fu/* already in plan9.h #include <sys/types.h> *//* for struct passwd, struct group, struct stat ... */
+/* already in plan9.h #include <sys/types.h> *//* for struct passwd, struct group, struct stat ... */
 /* plan9.h is first to get the large file support definitions as early as possible */
 #include "plan9.h"
 #include <sys/stat.h>	/* for stat, umask */
