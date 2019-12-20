@@ -1570,7 +1570,9 @@ useropen(Fid *fid, int omode, char **ep)
 		a |= W_OK;
 		o |= O_TRUNC;
 	}
-
+#ifdef _WIN32
+        o |= O_BINARY;
+#endif        
 	if(S_ISDIR(fid->st.st_mode)){
 		if(a != R_OK){
 			fprint(2, "attempt by %s to open dir %d\n", fid->u->name, omode);
