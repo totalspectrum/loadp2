@@ -1,4 +1,4 @@
-/* already in plan9.h #include <sys/types.h> *//* for struct passwd, struct group, struct stat ... */
+fu/* already in plan9.h #include <sys/types.h> *//* for struct passwd, struct group, struct stat ... */
 /* plan9.h is first to get the large file support definitions as early as possible */
 #include "plan9.h"
 #include <sys/stat.h>	/* for stat, umask */
@@ -1674,6 +1674,9 @@ usercreate(Fid *fid, char *elem, int omode, long perm, char **ep)
 		}
 		if(omode & OTRUNC)
 			o |= O_TRUNC;
+#ifdef _WIN32
+                o |= O_BINARY;
+#endif                
 		if((fid->fd = open(npath, o, perm&0777)) < 0){
 			if(chatty9p)
 				fprint(2, "create(%s, 0x%x, 0%o) failed\n", npath, o, perm&0777);
