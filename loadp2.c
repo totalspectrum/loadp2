@@ -80,7 +80,7 @@ static char *buffer = (char *)ibuf;
 static char *binbuffer = (char *)ibin;
 static int verbose = 0;
 static int waitAtExit = 0;
-static int force_zero = 1;  /* default to zeroing memory */
+static int force_zero = 0;  /* default to zeroing memory */
 static int do_hwreset = 1;
 
 /* duplicate a string, useful if our original string might
@@ -137,7 +137,8 @@ usage: loadp2\n\
          [ -CHIP ]                 set load mode for CHIP\n\
          [ -FPGA ]                 set load mode for FPGA\n\
          [ -PATCH ]                patch in clock frequency and serial parms\n\
-         [ -NOZERO ]               do not clear memory before download\n\
+         [ -NOZERO ]               do not clear memory before download (default)\n\
+         [ -ZERO ]                 clear memory before download\n\
          [ -SINGLE ]               set load mode for single stage\n\
          filespec                  file to load\n\
          [ -e script ]             send a sequence of characters after starting P2\n\
@@ -910,6 +911,8 @@ int main(int argc, char **argv)
                 load_mode = LOAD_SINGLE;
             else if (!strcmp(argv[i], "-NOZERO"))
                 force_zero = 0;
+            else if (!strcmp(argv[i], "-ZERO"))
+                force_zero = 1;
             else
             {
                 printf("Invalid option %s\n", argv[i]);
