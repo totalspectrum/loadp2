@@ -29,7 +29,8 @@ usage: loadp2
          [ -CHIP ]                 set load mode for CHIP
          [ -FPGA ]                 set load mode for FPGA
          [ -PATCH ]                patch in clock frequency and serial parms
-         [ -NOZERO ]               do not clear memory before download
+         [ -ZERO ]                 clear memory before download
+         [ -NOZERO ]               do not clear memory before download (default)
          [ -SINGLE ]               set load mode for single stage
          filespec                  file(s) to load
 	 [ -e script ]             execute script after loading
