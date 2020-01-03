@@ -19,7 +19,7 @@ begin		hubset	clkmode_			'set up oscillator
 	if_z	jmp	#skipzero
 		'' zero out memory
 		wrfast	#0,#0
-		mov	pb, ##$7c0000/16
+		mov	pb, ##$7c000/16
 zeroloop
 		wflong	zeros
 		wflong	zeros
