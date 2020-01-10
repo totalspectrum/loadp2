@@ -18,6 +18,8 @@ void exit(int n)
     for(;;) ;
 }
 
+extern int sdmmc_is_present(void);
+
 #define MSG_DELAY 20000000
 int main (void)
 {
@@ -27,14 +29,16 @@ int main (void)
         uint32_t siz;
         int c;
         
-        _clkset($010007f8, 160000000);
+        _clkset(0x010007f8, 160000000);
         
-        printf("SD Updater...\n");
-        printf("Insert card and press enter to continue...\n");
-        do {
-            c = getchar();
-        } while (c != 10 && c != 13);
-        printf("Mounting...\n");
+        printf("SD Updater\n");
+        while (!sdmmc_is_present()) {
+            printf("Insert card and press enter to continue...\n");
+            do {
+                c = getchar();
+            } while (c != 10 && c != 13);
+        }
+
         // wait a little bit
         _waitx(MSG_DELAY);
         

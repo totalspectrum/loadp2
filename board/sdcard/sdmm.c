@@ -47,8 +47,8 @@
 // 160 MHz clock, for 400 kHz operation we need to delay 400 cycles
 //                for 200 kHz delay 800 cycles
 // note though that we typically do a CK_H(); CK_L() sequence so the delay here can be half
-#define PAUSE() (_waitx(40))
-#define SHORTPAUSE() (_waitx(20))
+#define PAUSE() (_waitx(80))
+#define SHORTPAUSE() (_waitx(40))
 
 #define DO_INIT()	_dirl(PIN_DO)				/* Initialize port for MMC DO as input */
 #define DO		(SHORTPAUSE(), (_pinr(PIN_DO) & 1))	/* Test for MMC DO ('H':true, 'L':false) */
@@ -565,3 +565,19 @@ DRESULT disk_ioctl (
 }
 
 
+/* check for card present */
+int sdmmc_is_present(void) {
+    int i;
+
+    i = _pinr(PIN_DO);
+    if (i == 0) {
+        return 1;
+    }
+    // check for pull-up on pin 60
+    _pinl(PIN_SS);
+    _waitx(400); // wait > 1us
+    _pinf(PIN_SS); // does a fltl
+    _waitx(2000); // wait > 2 us
+    i = _pinr(PIN_SS);
+    return i;
+}
