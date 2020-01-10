@@ -91,6 +91,6 @@ int main (void)
 	} else {
             printf("error %d opening %s\n", fr, FILENAME);
         }
-
-        exit(0);
+        _waitx(_clockfreq());
+        _reboot();
 }
