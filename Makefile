@@ -46,10 +46,10 @@ else
 endif
 
 # board support programs
-BOARDS=board/P2ES_flashloader.bin
+BOARDS=board/P2ES_flashloader.bin board/P2ES_sdcard.bin
 
 # program for converting MainLoader.spin2 to MainLoader.binary
-PASM=fastspin -2
+P2ASM=fastspin -2
 
 default: $(BUILD)/loadp2$(EXT) $(BOARDS)
 
@@ -69,5 +69,11 @@ $(BUILD):
 %.h: %.bin
 	xxd -i $< > $@
 
+SD_SRCS=board/sdcard/Makefile board/sdcard/sdboot.c board/sdcard/sdmm.c board/sdcard/ff.c board/sdcard/diskio.h board/sdcard/ffconf.h board/sdcard/ff.c
+
+board/P2ES_sdcard.bin: $(SD_SRCS)
+	make -C board/sdcard
+	mv board/sdcard/sdboot.binary board/P2ES_sdcard.bin
+
 %.bin: %.spin2
-	$(PASM) -o $@ $<
+	$(P2ASM) -o $@ $<

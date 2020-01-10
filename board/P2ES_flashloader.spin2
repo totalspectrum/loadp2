@@ -3,9 +3,9 @@ Prop2 Flash loader
 Version 1.2 17th January 2019 - ozpropdev
 18 Oct 2019   Reengineered the programming bitbashing to resolve an issue that turned out to be a faulty board - Evan H
 31 Oct 2019   Modified to use dual smartpins for block reads with DualSPI signalling
-17 Nov 2019   Modified to load source program length and then data from $1000
+17 Nov 2019   Modified to load source program length and then data from $8000
   This allows use with loadp2 via:
-     loadp2 @0=P2ES_flashloader.binary,@1000+someprog.binary
+     loadp2 @0=P2ES_flashloader.binary,@8000+someprog.binary
   to program an arbitrary binary like "someprog.binary"
 
 Used in loadp2 with permission of the authors.
@@ -19,7 +19,7 @@ First long is code size in bytes.
 
 See end of program for examples of how to include users .obj file.
 (or better yet use loadp2 to put the file in memory at
- $1000, see above)
+ $8000, see above)
 }
 
 con
@@ -450,9 +450,9 @@ done_msg
 		
 '==============================================================================================
 
-		orgh $1000
+		orgh $8000
 
-size		long	@code_end - @code			'located at Flash address $1000
+size		long	@code_end - @code			'located at Flash address $8000
 
 code
 
