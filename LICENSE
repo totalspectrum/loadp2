@@ -23,4 +23,25 @@ SOFTWARE.
 9P file system
 ==============
 
-The 9P file system code in the u9fs subdirectory is adapted from the Plan 9 source code. See the u9fs/LICENSE file for its exact terms of use.
+The 9P file system code in the u9fs subdirectory is adapted from the Plan 9 source code, which has the following license:
+
+The authors of this software are Bob Flandrena, Ken Thompson,
+Rob Pike, and Russ Cox.
+
+                Copyright (c) 1992-2002 by Lucent Technologies.
+
+Permission to use, copy, modify, and distribute this software for any
+purpose without fee is hereby granted, provided that this entire notice
+is included in all copies of any software which is or includes a copy
+or modification of this software and in all copies of the supporting
+documentation for such software.
+
+THIS SOFTWARE IS BEING PROVIDED "AS IS", WITHOUT ANY EXPRESS OR IMPLIED
+WARRANTY.  IN PARTICULAR, NEITHER THE AUTHORS NOR LUCENT TECHNOLOGIES MAKE ANY
+REPRESENTATION OR WARRANTY OF ANY KIND CONCERNING THE MERCHANTABILITY
+OF THIS SOFTWARE OR ITS FITNESS FOR ANY PARTICULAR PURPOSE.
+
+SDCARD writer
+=============
+
+The SD card and FAT file system writing code found in `board/sdcard` is Copyright (C) 2019, ChaN, and distributed with no restrictions but NO WARRANTY. See the source code for details.
