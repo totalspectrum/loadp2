@@ -72,7 +72,7 @@ $(BUILD):
 SD_SRCS=board/sdcard/Makefile board/sdcard/sdboot.c board/sdcard/sdmm.c board/sdcard/ff.c board/sdcard/diskio.h board/sdcard/ffconf.h board/sdcard/ff.c
 
 board/P2ES_sdcard.bin: $(SD_SRCS)
-	make -C board/sdcard
+	make -C board/sdcard P2CC="$(P2ASM)"
 	mv board/sdcard/sdboot.binary board/P2ES_sdcard.bin
 
 %.bin: %.spin2
