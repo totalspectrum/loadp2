@@ -63,6 +63,7 @@ int u9fs_init(char *user_root);
 int u9fs_process(int count, char *buf);
 
 /* in loadp2.c */
+extern int waitAtExit; // if nonzero prompt before exiting
 void promptexit(int status);
 
 #endif

@@ -79,7 +79,7 @@ static int32_t ibin[32];
 static char *buffer = (char *)ibuf;
 static char *binbuffer = (char *)ibin;
 static int verbose = 0;
-static int waitAtExit = 0;
+int waitAtExit = 0;
 static int force_zero = 0;  /* default to zeroing memory */
 static int do_hwreset = 1;
 
@@ -116,7 +116,7 @@ promptexit(int r)
 static void Usage(void)
 {
 printf("\
-loadp2 - a loader for the propeller 2 - version 0.038 2020-01-10\n\
+loadp2 - a loader for the propeller 2 - version 0.039 2020-01-14\n\
 usage: loadp2\n\
          [ -p port ]               serial port\n\
          [ -b baud ]               user baud rate (default is %d)\n\

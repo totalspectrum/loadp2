@@ -390,8 +390,10 @@ void terminal_mode(int check_for_exit, int pst_mode)
 	        }
         }
         else if (console_kbhit()) {
-            if ((buf[0] = console_getch()) == EXIT_CHAR0)
+            if ((buf[0] = console_getch()) == EXIT_CHAR0) {
+                waitAtExit = 0; // user chose to quit
                 break;
+            }
             tx(buf, 1);
         }
     }
