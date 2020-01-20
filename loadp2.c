@@ -113,8 +113,11 @@ promptexit(int r)
 }
 
 /* Usage - display a usage message and exit */
-static void Usage(void)
+static void Usage(const char *msg)
 {
+    if (msg) {
+        printf("%s\n", msg);
+    }
 printf("\
 loadp2 - a loader for the propeller 2 - version 0.039 2020-01-14\n\
 usage: loadp2\n\
@@ -783,8 +786,9 @@ int main(int argc, char **argv)
                     port = &argv[i][2];
                 else if (++i < argc)
                     port = argv[i];
-                else
-                    Usage();
+                else {
+                    Usage("Missing parameter for -p");
+                }
             }
             else if (argv[i][1] == 'b')
             {
@@ -792,8 +796,9 @@ int main(int argc, char **argv)
                     user_baud = atoi(&argv[i][2]);
                 else if (++i < argc)
                     user_baud = atoi(argv[i]);
-                else
-                    Usage();
+                else {
+                    Usage("Missing parameter for -b");
+                }
             }
             else if (argv[i][1] == 'l')
             {
@@ -801,8 +806,8 @@ int main(int argc, char **argv)
                     loader_baud = atoi(&argv[i][2]);
                 else if (++i < argc)
                     loader_baud = atoi(argv[i]);
-                else
-                    Usage();
+                else 
+                    Usage("Missing parameter for -l");
             }
             else if (argv[i][1] == 'X')
             {
@@ -811,7 +816,7 @@ int main(int argc, char **argv)
                 else if (++i < argc)
                     extra_cycles = atoi(argv[i]);
                 else
-                    Usage();
+                    Usage("Missing parameter for -X");
             }
             else if (argv[i][1] == 'e')
             {
@@ -820,7 +825,7 @@ int main(int argc, char **argv)
                 else if (++i < argc)
                     send_script = argv[i];
                 else
-                    Usage();
+                    Usage("Missing script for -e");
             }
             else if (argv[i][1] == 'f')
             {
@@ -829,7 +834,7 @@ int main(int argc, char **argv)
                 else if (++i < argc)
                     clock_freq = atoi(argv[i]);
                 else
-                    Usage();
+                    Usage("Missing frequency for -f");
             }
             else if (argv[i][1] == 'k')
             {
@@ -850,7 +855,7 @@ int main(int argc, char **argv)
                 else if (++i < argc)
                     clock_mode = atox(argv[i]);
                 else
-                    Usage();
+                    Usage("Missing clock mode for -m");
             }
             else if (argv[i][1] == 's')
             {
@@ -859,7 +864,7 @@ int main(int argc, char **argv)
                 else if (++i < argc)
                     address = atox(argv[i]);
                 else
-                    Usage();
+                    Usage("Missing start address for -s");
             }
             else if (argv[i][1] == 't')
                 runterm = 1;
@@ -873,24 +878,24 @@ int main(int argc, char **argv)
                 else if (++i < argc)
                     monitor = &argv[i][0];
                 else
-                    Usage();
+                    Usage("Missing option for -x");
                 if (monitor) {
                     if (!strcmp(monitor, "TAQOZ")) {
                         enter_rom = ENTER_TAQOZ;
                     } else if (!strcmp(monitor, "DEBUG")) {
                         enter_rom = ENTER_DEBUG;
                     } else {
-                        Usage();
+                        Usage("Unknown monitor option after -x");
                     }
                 } else {
-                    Usage();
+                    Usage("Missing monitor after -x");
                 }
             }
             else if (argv[i][1] == 'v')
                 verbose = 1;
             else if (argv[i][1] == '?')
             {
-                Usage();
+                Usage(NULL);
             }
             else if (argv[i][1] == '9')
             {
@@ -899,7 +904,7 @@ int main(int argc, char **argv)
                 else if (++i < argc)
                     u9root = &argv[i][0];
                 else
-                    Usage();
+                    Usage("Missing directory option for -9");
             }
             else if (!strcmp(argv[i], "-PATCH"))
                 patch_mode = 1;
@@ -916,12 +921,12 @@ int main(int argc, char **argv)
             else
             {
                 printf("Invalid option %s\n", argv[i]);
-                Usage();
+                Usage(NULL);
             }
         }
         else
         {
-            if (fname) Usage();
+            if (fname) Usage("too many files specified on command line");
             fname = argv[i];
         }
     }
@@ -929,11 +934,12 @@ int main(int argc, char **argv)
     if (enter_rom) {
         if (fname) {
             printf("Entering ROM is incompatible with downloading a file\n");
-            Usage();
+            Usage(NULL);
         }
     }
-    if (!fname && !runterm && !enter_rom) Usage();
-
+    if (!fname && !runterm && !enter_rom) {
+        Usage("Must specify a file name or -t or -x");
+    }
     // Determine the user baud rate
     if (user_baud == -1)
     {
