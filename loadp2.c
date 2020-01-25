@@ -629,7 +629,7 @@ int loadfile(char *fname, int address)
 // check for a p2 on a specific port
 
 static int
-checkp2_and_init(char *Port, int baudrate)
+checkp2_and_init(char *Port, int baudrate, int retries)
 {
     char buffer[101];
     int num;
@@ -647,7 +647,7 @@ checkp2_and_init(char *Port, int baudrate)
     hwreset();
     if (verbose) printf("trying %s...\n", Port);
 
-    for (i = 0; i < 20; i++) {
+    for (i = 0; i < retries; i++) {
         flush_input();
         tx((uint8_t *)"> Prop_Chk 0 0 0 0  ", 20);
         msleep(10);
@@ -697,7 +697,7 @@ int findp2(char *portprefix, int baudrate)
     for (i = 0; i < 20; i++)
     {
         sprintf(Port, "%s%d", portprefix, i);
-        if (checkp2_and_init(Port, baudrate))
+        if (checkp2_and_init(Port, baudrate, 20))
         {
             return 1;
         }
@@ -720,7 +720,7 @@ int findp2(char *portprefix, int baudrate)
         }
         strcpy(Port, "/dev/");
         strcat(Port, entry->d_name);
-        if (checkp2_and_init(Port, baudrate)) {
+        if (checkp2_and_init(Port, baudrate, 20)) {
             closedir(dir);
             return 1;
         }
@@ -973,7 +973,7 @@ int main(int argc, char **argv)
     }
     else
     {
-        if (!checkp2_and_init(port, loader_baud))
+        if (!checkp2_and_init(port, loader_baud, 100))
         {
             printf("Could not find a P2 on port %s\n", port);
             promptexit(1);
