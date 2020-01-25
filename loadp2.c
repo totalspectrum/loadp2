@@ -119,7 +119,7 @@ static void Usage(const char *msg)
         printf("%s\n", msg);
     }
 printf("\
-loadp2 - a loader for the propeller 2 - version 0.039 2020-01-14\n\
+loadp2 - a loader for the propeller 2 - version 0.040 2020-01-14\n\
 usage: loadp2\n\
          [ -p port ]               serial port\n\
          [ -b baud ]               user baud rate (default is %d)\n\
@@ -647,7 +647,7 @@ checkp2_and_init(char *Port, int baudrate)
     hwreset();
     if (verbose) printf("trying %s...\n", Port);
 
-    for (i = 0; i < 100; i++) {
+    for (i = 0; i < 20; i++) {
         flush_input();
         tx((uint8_t *)"> Prop_Chk 0 0 0 0  ", 20);
         msleep(10);
