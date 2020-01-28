@@ -697,7 +697,7 @@ int findp2(char *portprefix, int baudrate)
     for (i = 0; i < 20; i++)
     {
         sprintf(Port, "%s%d", portprefix, i);
-        if (checkp2_and_init(Port, baudrate, 20))
+        if (checkp2_and_init(Port, baudrate, 50))
         {
             return 1;
         }
@@ -720,7 +720,7 @@ int findp2(char *portprefix, int baudrate)
         }
         strcpy(Port, "/dev/");
         strcat(Port, entry->d_name);
-        if (checkp2_and_init(Port, baudrate, 20)) {
+        if (checkp2_and_init(Port, baudrate, 50)) {
             closedir(dir);
             return 1;
         }
