@@ -119,7 +119,7 @@ static void Usage(const char *msg)
         printf("%s\n", msg);
     }
 printf("\
-loadp2 - a loader for the propeller 2 - version 0.040 2020-01-14\n\
+loadp2 - a loader for the propeller 2 - version 0.041 2020-01-31\n\
 usage: loadp2\n\
          [ -p port ]               serial port\n\
          [ -b baud ]               user baud rate (default is %d)\n\
@@ -720,7 +720,7 @@ int findp2(char *portprefix, int baudrate)
         }
         strcpy(Port, "/dev/");
         strcat(Port, entry->d_name);
-        if (checkp2_and_init(Port, baudrate, 50)) {
+        if (checkp2_and_init(Port, baudrate, 60)) {
             closedir(dir);
             return 1;
         }
