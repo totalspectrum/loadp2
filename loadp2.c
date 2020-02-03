@@ -119,7 +119,7 @@ static void Usage(const char *msg)
         printf("%s\n", msg);
     }
 printf("\
-loadp2 - a loader for the propeller 2 - version 0.041 2020-01-31\n\
+loadp2 - a loader for the propeller 2 - version 0.042 " __DATE__ "\n\
 usage: loadp2\n\
          [ -p port ]               serial port\n\
          [ -b baud ]               user baud rate (default is %d)\n\
@@ -523,11 +523,14 @@ int loadfile(char *fname, int address)
     {
         int retry;
         // receive checksum, verify it's "@@ "
-        msleep(50);
+        wait_drain();
+        msleep(20); // wait for code to start up
         tx_raw_byte(' ');
-        for (retry = 0; retry < 5; retry++) {
+        wait_drain();
+        for (retry = 0; retry < 3; retry++) {
             // send autobaud character
             tx_raw_byte(' ');
+            wait_drain();
             msleep(10);
             num = rx_timeout((uint8_t *)buffer, 3, 200);
             if (num == 3) break;
