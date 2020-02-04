@@ -41,11 +41,7 @@
 #define LOAD_FPGA   1
 #define LOAD_SINGLE 2
 
-#if defined(MACOSX)
-static int loader_baud = 921600;
-#else
 static int loader_baud = 2000000;
-#endif
 static int clock_mode = -1;
 static int user_baud = 115200;
 static int clock_freq = 80000000;
