@@ -521,12 +521,12 @@ int loadfile(char *fname, int address)
         // receive checksum, verify it's "@@ "
         wait_drain();
         msleep(50); // wait for code to start up
-        tx_raw_byte(' ');
+        tx_raw_byte(0x55);
         wait_drain();
         msleep(1);
         for (retry = 0; retry < 3; retry++) {
             // send autobaud character
-            tx_raw_byte(' ');
+            tx_raw_byte(0x55);
             wait_drain();
             msleep(10);
             num = rx_timeout((uint8_t *)buffer, 3, 200);

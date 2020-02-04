@@ -211,7 +211,10 @@ int serial_init(const char* port, unsigned long baud)
     sparm.c_cc[VTIME] = 0;
     sparm.c_cc[VMIN] = 1;
 
-#if !defined(MACOSX)    
+#if defined(MACOSX)
+    cfsetospeed(&sparm, B921600); // dummy speed, overridden later
+    cfsetispeed(&sparm, B921600); // dummy speed
+#else    
     if (!set_baud(&sparm, baud)) {
         close(hSerial);
         printf("failure setting baud %ld\n", (long)baud);

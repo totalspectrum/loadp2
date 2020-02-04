@@ -1,3 +1,5 @@
+'#define DEBUG 1
+
 CON
 		tx_pin = 62
 		rx_pin = 63
@@ -30,6 +32,7 @@ zeroloop
 skipzero
 
 restart		
+
 		'' set up uart smart pins
 		'' we don't know for sure what the frequency is, so use
 		'' auto baud rate detection for this
@@ -47,21 +50,23 @@ restart
 		wxpin   pa, #rx_pin
 		dirh    #rx_pin
 
-		'' try to receive a space
+		'' try to receive a $55
 		'' if it works, autobaud is OK, otherwise re-try
 .space
 		testp	#rx_pin wc
 	if_nc	jmp	#.space
 		rdpin	rxbyte, #rx_pin
 		shr	rxbyte, #24
-		cmp	rxbyte, #$20 wz
+		cmp	rxbyte, #$55 wz
 	if_nz	jmp	#restart
 	
+#ifdef DEBUG
+		drvl	#dbg_pin
+#endif		
 		'' send 0 to host to indicate we are ready
 setup
 		mov	chksum, #0
 		call	#send_chksum
-
 read_file
 		mov	chksum, #0
 		'' read file address
@@ -90,6 +95,9 @@ read_file
 		'' respond to host
 		call	#send_chksum
 
+#ifdef DEBUG
+		drvh	#dbg_pin
+#endif		
 		'' check host response
 		'' if they send "+" then look for another file
 		call	 #ser_rx
@@ -170,7 +178,10 @@ autobaud
 
     		test port, #1 wc	' set C to distinguish INA/OUTA
     		test port, #2 wz    ' set Z (match on =)
-		
+
+		mov	waitbit, #0
+		mov	abcount, #2
+autobaud_loop
                 setpat mask, #0	' wait for pin lo (start bit)
     		waitpat
 		setpat mask, mask	' wait for pin hi (first 1)
@@ -181,17 +192,18 @@ autobaud
     		getct b
 		setpat mask,mask	' wait for pin hi again (end of 0 sequence)
 		waitpat
-		getct waitbit
+		getct c
 
-		sub   waitbit, b
+		sub   c, b
 		sub   b, a
-		fle   waitbit, b
-		mov   a, waitbit
-		shl   a, #3
-		waitx a
-		
+		fle   c, b
+		add   waitbit, c
+		djnz  abcount, #autobaud_loop
+
+		add   waitbit, #1
+		shr   waitbit, #1	' divide by 2
 		ret
-		
+
 zeros
 		long	0
 startaddr	long	-1			'starting address
@@ -211,4 +223,5 @@ mask		res	1
 port		res	1
 a		res	1
 b		res	1
-
+c		res	1
+abcount		res	1
