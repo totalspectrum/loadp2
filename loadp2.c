@@ -519,15 +519,21 @@ int loadfile(char *fname, int address)
     {
         int retry;
         // receive checksum, verify it's "@@ "
+#ifndef _WIN32        
         wait_drain();
+#endif        
         msleep(50); // wait for code to start up
         tx_raw_byte(0x55);
+#ifndef _WIN32        
         wait_drain();
+#endif        
         msleep(1);
         for (retry = 0; retry < 3; retry++) {
             // send autobaud character
             tx_raw_byte(0x55);
+#ifndef _WIN32            
             wait_drain();
+#endif            
             msleep(10);
             num = rx_timeout((uint8_t *)buffer, 3, 200);
             if (num == 3) break;
@@ -601,6 +607,9 @@ int loadfile(char *fname, int address)
         }
         // receive checksum, verify it
         int recv_chksum = 0;
+#ifdef _WIN32
+        wait_drain();
+#endif        
         num = rx_timeout((uint8_t *)buffer, 3, 400);
         if (num != 3) {
             printf("ERROR: timeout waiting for checksum at end: got %d\n", num);
