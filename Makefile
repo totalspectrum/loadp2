@@ -53,7 +53,7 @@ P2ASM=fastspin -2
 
 default: $(BUILD)/loadp2$(EXT) $(BOARDS)
 
-HEADERS=MainLoader.h MainLoader1.h
+HEADERS=MainLoader_fpga.h MainLoader_chip.h
 
 U9FS=u9fs/u9fs.c u9fs/authnone.c u9fs/print.c u9fs/doprint.c u9fs/rune.c u9fs/fcallconv.c u9fs/dirmodeconv.c u9fs/convM2D.c u9fs/convS2M.c u9fs/convD2M.c u9fs/convM2S.c u9fs/readn.c
 

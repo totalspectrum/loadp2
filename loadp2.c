@@ -67,8 +67,8 @@ static void RunScript(char *script);
   #include <dirent.h>
 #endif
 
-#include "MainLoader.h"
-#include "MainLoader1.h"
+#include "MainLoader_fpga.h"
+#include "MainLoader_chip.h"
 
 static int32_t ibuf[256];
 static int32_t ibin[32];
@@ -427,7 +427,7 @@ int loadfileFPGA(char *fname, int address)
         printf("Loading fast loader for %s...\n", (load_mode == LOAD_FPGA) ? "fpga" : "chip");
     }
     tx((uint8_t *)"> Prop_Hex 0 0 0 0", 18);
-    txstring((uint8_t *)MainLoader_bin, MainLoader_bin_len);
+    txstring((uint8_t *)MainLoader_fpga_bin, MainLoader_fpga_bin_len);
     // OLD FPGA loader
     txval(clock_mode);
     txval((3*clock_freq+loader_baud)/(loader_baud*2)-extra_cycles);
@@ -511,7 +511,7 @@ int loadfile(char *fname, int address)
         printf("Loading fast loader for %s...\n", (load_mode == LOAD_FPGA) ? "fpga" : "chip");
     }
     tx((uint8_t *)"> Prop_Hex 0 0 0 0", 18);
-    txstring((uint8_t *)MainLoader1_bin, MainLoader1_bin_len);
+    txstring((uint8_t *)MainLoader_chip_bin, MainLoader_chip_bin_len);
     txval(clock_mode);
     txval(flag_bits());
     tx((uint8_t *)"~", 1);

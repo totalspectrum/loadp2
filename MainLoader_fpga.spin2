@@ -1,3 +1,5 @@
+		' ancient FPGA loader code
+		' this probably should be deleted someday
 CON
 		rxpin = 63
 
