@@ -22,10 +22,7 @@ CON
 		
 DAT		org
 
-begin		hubset	clkmode_			'set up oscillator 
-                waitx   ##25_000_000/100        'wait >10 ms
-                or      clkmode_, #3             'enable XI+PLL mode
-                hubset  clkmode_                 'enable oscillator
+begin
 		test	flagbits, #FLAGBIT_ZERO wz
 	if_z	jmp	#skipzero
 		'' zero out memory
@@ -121,14 +118,22 @@ read_file
 		wrpin	#0, #tx_pin
 		wrpin	#0, #rx_pin
 		
-		' switch back to rcfast mode, maybe
-		' if the binary was patched with -PATCH then we skip this
+		' switch to new clock mode, maybe
+		' if the binary was patched with -PATCH then we
+		' set the clock mode to clkmode_
 		test	flagbits, #FLAGBIT_PATCHED wz
-	if_nz	jmp	#start_cog		 ' patched, so start right now
-		' go back to rcfast mode
-		andn	 clkmode_, #3
+	if_z	jmp	#start_cog		 ' not patched, so start right now
+		' set clock to clkmode_
+		' do this in two steps, first clkmode_ & ~3 for rcfast
+		mov	pa, clkmode_ wz
+		' clkmode_ == 0 means RCFAST, and we're already in that mode
+	if_z	jmp	#start_cog
+		andn	pa, clkmode_
+		hubset	pa			' set up oscillator
+		waitx	##25_000_000/100	' wait 10 ms
+		test	clkmode_, #3 wz		' does clkmode include a crystal mode?
+	if_z	or	clkmode_, #3 		' if not, set it
 		hubset	 clkmode_
-		hubset	 #0
 start_cog
 		waitx	 ##25_000_000/10
 		coginit	#0,startaddr		'launch cog 0 from starting address
