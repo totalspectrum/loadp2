@@ -1,3 +1,12 @@
+''
+'' fast loader for CHIP mode
+'' this small loader is downloaded by the usual ROM loader, and can
+'' then do more sophisticated and slightly faster loading (using binary
+'' rather than hex or base64) of the main binary, which is typically much
+'' larger
+''
+
+' for debug use, look for #ifdef DEBUG
 '#define DEBUG 1
 
 CON
@@ -210,6 +219,9 @@ startaddr	long	-1			'starting address
 waitbit		long	99999
 
 		orgf	$100
+		'' the first two values here are set up by loadp2
+		'' (it sends a additional longs of data representing
+		'' these values as part of the load process)
 clkmode_	res	1			'clock mode
 flagbits	res	1			'flag bits, see definitions above
 loadaddr	res	1			'address for load
