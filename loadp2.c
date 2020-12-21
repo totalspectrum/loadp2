@@ -115,7 +115,7 @@ static void Usage(const char *msg)
         printf("%s\n", msg);
     }
 printf("\
-loadp2 - a loader for the propeller 2 - version 0.043 " __DATE__ "\n\
+loadp2 - a loader for the propeller 2 - version 0.044 " __DATE__ "\n\
 usage: loadp2\n\
          [ -p port ]               serial port\n\
          [ -b baud ]               user baud rate (default is %d)\n\
@@ -131,6 +131,8 @@ usage: loadp2\n\
          [ -n ]                    no reset; skip any hardware reset\n\
          [ -9 dir ]                serve 9p remote filesystem from dir\n\
          [ -? ]                    display a usage message and exit\n\
+         [ -DTR ]                  use DTR for reset (default)\n\
+         [ -RTS ]                  use RTS for reset\n\
          [ -xDEBUG ]               enter ROM debug monitor\n\
          [ -xTAQOZ ]               enter ROM version of TAQOZ\n\
          [ -CHIP ]                 set load mode for CHIP\n\
@@ -926,6 +928,10 @@ int main(int argc, char **argv)
                 force_zero = 0;
             else if (!strcmp(argv[i], "-ZERO"))
                 force_zero = 1;
+            else if (!strcmp(argv[i], "-DTR"))
+                serial_use_rts_for_reset(0);
+            else if (!strcmp(argv[i], "-RTS"))
+                serial_use_rts_for_reset(1);
             else
             {
                 printf("Invalid option %s\n", argv[i]);
