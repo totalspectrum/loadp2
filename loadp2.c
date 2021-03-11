@@ -115,7 +115,7 @@ static void Usage(const char *msg)
         printf("%s\n", msg);
     }
 printf("\
-loadp2 - a loader for the propeller 2 - version 0.045 " __DATE__ "\n\
+loadp2 - a loader for the propeller 2 - version 0.046 " __DATE__ "\n\
 usage: loadp2\n\
          [ -p port ]               serial port\n\
          [ -b baud ]               user baud rate (default is %d)\n\
@@ -401,7 +401,6 @@ int loadfilesingle(char *fname)
         wait_drain();
     }
 
-    msleep(100);
     if (verbose) printf("%s loaded\n", fname);
     return 0;
 }
@@ -544,6 +543,12 @@ int loadfile(char *fname, int address)
             printf("ERROR: timeout waiting for initial checksum: got %d\n", num);
             promptexit(1);
         }
+        // every so often we get a 0 byte first before the checksum; if
+        // we do, throw it away
+        if (buffer[0] == 0 && buffer[2] == '@') {
+            buffer[0] = buffer[2];
+            rx_timeout((uint8_t *)&buffer[2], 1, 100);
+        }
         if (buffer[0] != '@' || buffer[1] != '@') {
             printf("ERROR: got incorrect initial chksum: %c%c%c (%02x %02x %02x)\n", buffer[0], buffer[1], buffer[2], buffer[0], buffer[1], buffer[2]);
             promptexit(1);
@@ -551,6 +556,8 @@ int loadfile(char *fname, int address)
     }
 
     // we want to be able to insert 0 characters in fname
+    // in order to break up multiple file names into different strings
+    // so we have to copy it to a duplicate buffer
     fname = duplicate_string(fname);
     
     do {
