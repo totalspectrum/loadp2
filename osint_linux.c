@@ -478,7 +478,7 @@ void terminal_mode(int runterm_mode, int pst_mode)
                     int i;
                     for (i = 0; i < cnt; ++i) {
                         //printf("%02x\n", buf[i]);
-                        if (buf[i] == EXIT_CHAR0) {
+                        if (buf[i] == EXIT_CHAR0 || buf[i] == EXIT_CHAR1) {
                             waitAtExit = 0; // user chose to quit
                             goto done;
                         }

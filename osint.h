@@ -35,6 +35,7 @@
 /* serial i/o definitions */
 #define SERIAL_TIMEOUT  -1
 #define EXIT_CHAR0 29 /* CTRL-] exits from terminal */
+#define EXIT_CHAR1 26 /* CTRL-Z also exits from terminal */
 
 /* serial i/o routines */
 void serial_use_rts_for_reset(int use_rts);

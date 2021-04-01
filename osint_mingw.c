@@ -364,7 +364,8 @@ void terminal_mode(int runterm_mode, int pst_mode)
             }
         }
         else if (kbhit()) {
-            if ((buf[0] = getch()) == EXIT_CHAR0) {
+            buf[0] = getch();
+            if (buf[0] == EXIT_CHAR0 || buf[0] == EXIT_CHAR1) {
                 waitAtExit = 0; // user chose to quit
                 break;
             }

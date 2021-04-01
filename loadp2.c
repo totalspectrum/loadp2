@@ -115,7 +115,7 @@ static void Usage(const char *msg)
         printf("%s\n", msg);
     }
 printf("\
-loadp2 - a loader for the propeller 2 - version 0.046 " __DATE__ "\n\
+loadp2 - a loader for the propeller 2 - version 0.047 " __DATE__ "\n\
 usage: loadp2\n\
          [ -p port ]               serial port\n\
          [ -b baud ]               user baud rate (default is %d)\n\
@@ -529,7 +529,7 @@ int loadfile(char *fname, int address)
         wait_drain();
 #endif        
         msleep(1);
-        for (retry = 0; retry < 3; retry++) {
+        for (retry = 0; retry < 5; retry++) {
             // send autobaud character
             tx_raw_byte(0x55);
 #ifndef _WIN32            
@@ -1055,7 +1055,7 @@ int main(int argc, char **argv)
         }
         if (runterm) {
             if (!quiet_mode) {
-                printf("( Entering terminal mode.  Press Ctrl-] to exit. )\n");
+                printf("( Entering terminal mode.  Press Ctrl-] or Ctrl-Z to exit. )\n");
             }
             terminal_mode(runterm, pstmode);
             if (!quiet_mode) {
