@@ -59,6 +59,7 @@ static void RunScript(char *script);
 #if defined(__CYGWIN__) || defined(__MINGW32__) || defined(__MINGW64__)
   #define PORT_PREFIX "com"
   #define INTEGER_PREFIXES
+  #include <windows.h>
 #elif defined(MACOSX)
   #define PORT_PREFIX "cu.usbserial"
   #include <dirent.h>
@@ -115,7 +116,7 @@ static void Usage(const char *msg)
         printf("%s\n", msg);
     }
 printf("\
-loadp2 - a loader for the propeller 2 - version 0.047 " __DATE__ "\n\
+loadp2 - a loader for the propeller 2 - version 0.048 " __DATE__ "\n\
 usage: loadp2\n\
          [ -p port ]               serial port\n\
          [ -b baud ]               user baud rate (default is %d)\n\
@@ -709,11 +710,14 @@ int findp2(char *portprefix, int baudrate)
     char Port[1024];
 #ifdef INTEGER_PREFIXES    
     int i;
+    char targetPath[1024];
     
     if (verbose) printf("Searching serial ports for a P2\n");
-    for (i = 0; i < 20; i++)
+    for (i = 1; i < 255; i++)
     {
         sprintf(Port, "%s%d", portprefix, i);
+        if (0==QueryDosDevice(Port, targetPath, sizeof(targetPath)))
+            continue;
         if (checkp2_and_init(Port, baudrate, 50))
         {
             return 1;
