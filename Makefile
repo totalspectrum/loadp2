@@ -51,6 +51,10 @@ BOARDS=board/P2ES_flashloader.bin board/P2ES_sdcard.bin
 # program for converting MainLoader.spin2 to MainLoader.binary
 P2ASM=flexspin -2
 
+# docs
+DOCS=README.md LICENSE
+
+# default build target
 default: $(BUILD)/loadp2$(EXT) $(BOARDS)
 
 HEADERS=MainLoader_fpga.h MainLoader_chip.h
@@ -77,3 +81,16 @@ board/P2ES_sdcard.bin: $(SD_SRCS)
 
 %.bin: %.spin2
 	$(P2ASM) -o $@ $<
+
+loadp2.linux:
+	make CROSS=linux32
+	cp build-linux32/loadp2 ./loadp2.linux
+loadp2.exe:
+	make CROSS=win32
+	cp build-win32/loadp2.exe ./loadp2.exe
+loadp2.mac:
+	make CROSS=macosx
+	cp build-macosx/loadp2 ./loadp2.mac
+
+zip: loadp2.exe loadp2.linux loadp2.mac
+	zip -r loadp2.zip loadp2.exe loadp2.mac loadp2.linux $(DOCS) board
