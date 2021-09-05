@@ -48,7 +48,7 @@ static int clock_freq = 80000000;
 static int extra_cycles = 7;
 static int load_mode = -1;
 static int patch_mode = 0;
-static int use_checksum = 0; // 1 seems to fail on MACOSX, not sure why
+static int use_checksum = 1;
 static int quiet_mode = 0;
 static int enter_rom = NO_ENTER;
 static char *send_script = NULL;
@@ -116,7 +116,7 @@ static void Usage(const char *msg)
         printf("%s\n", msg);
     }
 printf("\
-loadp2 - a loader for the propeller 2 - version 0.048 " __DATE__ "\n\
+loadp2 - a loader for the propeller 2 - version 0.049 " __DATE__ "\n\
 usage: loadp2\n\
          [ -p port ]               serial port\n\
          [ -b baud ]               user baud rate (default is %d)\n\
@@ -402,6 +402,7 @@ int loadfilesingle(char *fname)
         wait_drain();
     }
 
+    msleep(100);
     if (verbose) printf("%s loaded\n", fname);
     return 0;
 }
@@ -521,7 +522,7 @@ int loadfile(char *fname, int address)
     {
         int retry;
         // receive checksum, verify it's "@@ "
-#ifndef _WIN32        
+#ifndef _WIN32    
         wait_drain();
 #endif        
         msleep(50); // wait for code to start up
@@ -617,9 +618,7 @@ int loadfile(char *fname, int address)
         }
         // receive checksum, verify it
         int recv_chksum = 0;
-#ifdef _WIN32
         wait_drain();
-#endif        
         num = rx_timeout((uint8_t *)buffer, 3, 400);
         if (num != 3) {
             printf("ERROR: timeout waiting for checksum at end: got %d\n", num);
