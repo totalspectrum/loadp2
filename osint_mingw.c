@@ -158,12 +158,11 @@ int flush_input(void)
 
 /**
  * wait till transmit buffer is empty
- * for Windows we just wait for a bit
  * returns zero
  */
 int wait_drain(void)
 {
-    msleep(30);
+    FlushFileBuffers(hSerial);
     return 0;
 }
 

@@ -45,9 +45,10 @@ restart
 		dirl	#rx_pin
 		dirl	#tx_pin
 
+
 		call	#autobaud
 		mov     pa, waitbit	' autobaud set waitbit
-		shl	pa, #16
+		shl	pa, #13
 		or      pa, #7	' set for 8 bits
 		wrpin   ##ser_txmode, #tx_pin
 		wxpin   pa, #tx_pin
@@ -63,7 +64,7 @@ restart
 	if_nc	jmp	#.space
 		rdpin	rxbyte, #rx_pin
 		shr	rxbyte, #24
-		cmp	rxbyte, #$55 wz
+		cmp	rxbyte, #$80 wz
 	if_nz	jmp	#restart
 	
 #ifdef DEBUG
@@ -183,40 +184,25 @@ ser_rx_long
 ' automatically detect baud rate
 ' based on length of shortest 1 or 0
 ' we see next
-
 autobaud
 		dirl	#rx_pin
 		waitx	##1000
 		mov	mask, ##(1<<(rx_pin-32))
 		mov	port, #1
 
-    		test port, #1 wc	' set C to distinguish INA/OUTA
-    		test port, #2 wz    ' set Z (match on =)
+    	        test    port, #1 wc	' set C to distinguish INA/OUTA
+    	        test    port, #2 wz    ' set Z (match on =)
 
-		mov	waitbit, #0
-		mov	abcount, #2
-autobaud_loop
-                setpat mask, #0	' wait for pin lo (start bit)
-    		waitpat
-		setpat mask, mask	' wait for pin hi (first 1)
+                setpat  mask, #0	' wait for pin lo (start bit)
+    	        waitpat
+		getct   a
+		setpat  mask, mask	' wait for pin hi (first 1)
 		waitpat
-		getct a
-    		setpat mask, #0	' wait for pin lo again (following 0)
-    		waitpat
-    		getct b
-		setpat mask,mask	' wait for pin hi again (end of 0 sequence)
-		waitpat
-		getct c
+                getct   waitbit 
 
-		sub   c, b
-		sub   b, a
-		fle   c, b
-		add   waitbit, c
-		djnz  abcount, #autobaud_loop
-
-		add   waitbit, #1
-		shr   waitbit, #1	' divide by 2
+		sub     waitbit, a
 		ret
+
 
 zeros
 		long	0
@@ -239,6 +225,3 @@ chksum		res	1
 mask		res	1
 port		res	1
 a		res	1
-b		res	1
-c		res	1
-abcount		res	1
