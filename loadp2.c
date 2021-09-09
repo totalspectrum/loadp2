@@ -33,6 +33,9 @@
 #include "osint.h"
 #include "loadelf.h"
 
+/* default FIFO size of FT231X in P2-EVAL board and PropPlugs */
+#define FIFO_SIZE   512
+
 #define NO_ENTER    0
 #define ENTER_TAQOZ 1
 #define ENTER_DEBUG 2
@@ -79,6 +82,7 @@ static int verbose = 0;
 int waitAtExit = 0;
 static int force_zero = 0;  /* default to zeroing memory */
 static int do_hwreset = 1;
+static int fifo_size = FIFO_SIZE;
 
 /* duplicate a string, useful if our original string might
  * not be modifiable
@@ -131,6 +135,7 @@ usage: loadp2\n\
          [ -q ]                    quiet mode: also checks for exit sequence\n\
          [ -n ]                    no reset; skip any hardware reset\n\
          [ -9 dir ]                serve 9p remote filesystem from dir\n\
+         [ -FIFO bytes]            modify serial FIFO size (default is %d bytes)\n\
          [ -? ]                    display a usage message and exit\n\
          [ -DTR ]                  use DTR for reset (default)\n\
          [ -RTS ]                  use RTS for reset\n\
@@ -144,7 +149,7 @@ usage: loadp2\n\
          [ -SINGLE ]               set load mode for single stage\n\
          filespec                  file to load\n\
          [ -e script ]             send a sequence of characters after starting P2\n\
-", user_baud, loader_baud, clock_freq, clock_mode);
+", user_baud, loader_baud, clock_freq, clock_mode, FIFO_SIZE);
 printf("\n\
 In -CHIP mode, filespec may optionally be multiple files with address\n\
 specifiers, such as:\n\
@@ -384,6 +389,7 @@ int loadfilesingle(char *fname)
         tx( (uint8_t *)buffer, strlen(buffer) );
         tx((uint8_t *)"?", 1);
         wait_drain();
+        msleep(100+fifo_size*10*1000/loader_baud);
         num = rx_timeout((uint8_t *)buffer, 1, 100);
         if (num >= 0) buffer[num] = 0;
         else buffer[0] = 0;
@@ -400,6 +406,7 @@ int loadfilesingle(char *fname)
     {
         tx((uint8_t *)"~", 1);   // Added for Prop2-v28
         wait_drain();
+        msleep(fifo_size*10*1000/loader_baud);
     }
 
     msleep(100);
@@ -522,27 +529,24 @@ int loadfile(char *fname, int address)
     {
         int retry;
         // receive checksum, verify it's "@@ "
-#ifndef _WIN32    
         wait_drain();
-#endif        
+        msleep(1+fifo_size*10*1000/loader_baud); // wait for external USB fifo to drain
+        flush_input();
         msleep(50); // wait for code to start up
-        tx_raw_byte(0x55);
-#ifndef _WIN32        
+        tx_raw_byte(0x80);
         wait_drain();
-#endif        
-        msleep(1);
+        msleep(2);
         for (retry = 0; retry < 5; retry++) {
             // send autobaud character
-            tx_raw_byte(0x55);
-#ifndef _WIN32            
+            tx_raw_byte(0x80);
             wait_drain();
-#endif            
             msleep(10);
             num = rx_timeout((uint8_t *)buffer, 3, 200);
             if (num == 3) break;
         }
         if (num != 3) {
             printf("ERROR: timeout waiting for initial checksum: got %d\n", num);
+            printf("Try increasing the FIFO setting if not large enough for your setup\n");
             promptexit(1);
         }
         // every so often we get a 0 byte first before the checksum; if
@@ -619,9 +623,11 @@ int loadfile(char *fname, int address)
         // receive checksum, verify it
         int recv_chksum = 0;
         wait_drain();
+        msleep(1+fifo_size*10*1000/loader_baud);
         num = rx_timeout((uint8_t *)buffer, 3, 400);
         if (num != 3) {
             printf("ERROR: timeout waiting for checksum at end: got %d\n", num);
+            printf("Try increasing the FIFO setting if not large enough for your setup\n");
             return 1;
         }
         recv_chksum = (buffer[0] - '@') << 4;
@@ -662,13 +668,15 @@ checkp2_and_init(char *Port, int baudrate, int retries)
 
     // reset and look for a P2
     hwreset();
+    msleep(20); // wait for P2 to become active
     if (verbose) printf("trying %s...\n", Port);
 
     for (i = 0; i < retries; i++) {
         flush_input();
         tx((uint8_t *)"> Prop_Chk 0 0 0 0  ", 20);
-        msleep(10);
-        num = rx_timeout((uint8_t *)buffer, 20, 20);
+        wait_drain();
+        msleep(50+20*10*1000/loader_baud); // wait at least for 20 chars to empty through any fifo at the loader baud rate 
+        num = rx_timeout((uint8_t *)buffer, 20, 10+20*10*1000/loader_baud); // read 20 characters 
         if (num >= 0) buffer[num] = 0;
         else {
             buffer[0] = 0;
@@ -855,6 +863,13 @@ int main(int argc, char **argv)
                     clock_freq = atoi(argv[i]);
                 else
                     Usage("Missing frequency for -f");
+            }
+            else if (!strcmp(argv[i], "-FIFO"))
+            {
+                if (++i < argc)
+                    fifo_size = atoi(argv[i]);
+                else
+                    Usage("Missing byte count for -FIFO");
             }
             else if (argv[i][1] == 'k')
             {
