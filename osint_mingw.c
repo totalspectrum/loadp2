@@ -110,6 +110,8 @@ int serial_init(const char *port, unsigned long baud)
     return TRUE;
 }
 
+static int currentBaud = 115200;
+
 int serial_baud(unsigned long baud)
 {
     DCB state;
@@ -143,7 +145,7 @@ int serial_baud(unsigned long baud)
         break;
     }
     SetCommState(hSerial, &state);
-    
+    currentBaud = baud;
     return 1;
 }
 
@@ -162,7 +164,15 @@ int flush_input(void)
  */
 int wait_drain(void)
 {
+    int ms;
+    int numChars = 128;
     FlushFileBuffers(hSerial);
+    // FlushFileBuffers makes sure the data has reached the device driver,
+    // but the driver itself may buffer too, so add a delay
+    // we need to wait for numChars*10 bits to clear
+    // baud rate is currentBaud bits per second, so this is 10000 * numChars / currentBaud
+    ms = 10 + (10000 * numChars) / currentBaud;
+    msleep(ms);
     return 0;
 }
 
