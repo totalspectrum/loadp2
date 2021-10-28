@@ -34,7 +34,8 @@
 #include "loadelf.h"
 
 /* default FIFO size of FT231X in P2-EVAL board and PropPlugs */
-#define FIFO_SIZE   512
+//#define DEFAULT_FIFO_SIZE   512
+#define DEFAULT_FIFO_SIZE   1024 /* seems to work better */
 
 #define NO_ENTER    0
 #define ENTER_TAQOZ 1
@@ -82,7 +83,7 @@ static int verbose = 0;
 int waitAtExit = 0;
 static int force_zero = 0;  /* default to zeroing memory */
 static int do_hwreset = 1;
-static int fifo_size = FIFO_SIZE;
+static int fifo_size = DEFAULT_FIFO_SIZE;
 
 /* duplicate a string, useful if our original string might
  * not be modifiable
@@ -120,7 +121,7 @@ static void Usage(const char *msg)
         printf("%s\n", msg);
     }
 printf("\
-loadp2 - a loader for the propeller 2 - version 0.050 " __DATE__ "\n\
+loadp2 - a loader for the propeller 2 - version 0.051 " __DATE__ "\n\
 usage: loadp2\n\
          [ -p port ]               serial port\n\
          [ -b baud ]               user baud rate (default is %d)\n\
@@ -149,7 +150,7 @@ usage: loadp2\n\
          [ -SINGLE ]               set load mode for single stage\n\
          filespec                  file to load\n\
          [ -e script ]             send a sequence of characters after starting P2\n\
-", user_baud, loader_baud, clock_freq, clock_mode, FIFO_SIZE);
+", user_baud, loader_baud, clock_freq, clock_mode, DEFAULT_FIFO_SIZE);
 printf("\n\
 In -CHIP mode, filespec may optionally be multiple files with address\n\
 specifiers, such as:\n\
