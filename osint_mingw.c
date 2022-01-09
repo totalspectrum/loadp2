@@ -32,6 +32,7 @@
 #include <conio.h>
 #include <stdio.h>
 #include <stdarg.h>
+#include <io.h>
 #include "osint.h"
 
 static HANDLE hSerial = INVALID_HANDLE_VALUE;
@@ -337,11 +338,19 @@ void terminal_mode(int runterm_mode, int pst_mode)
     int continue_terminal = 1;
     int check_for_exit = runterm_mode != 0;
     int check_for_files = runterm_mode & 2;
-
+    int is_console = 0;
+    HANDLE hStdIn = INVALID_HANDLE_VALUE;
+    
 //    if (check_for_files) {
 //        printf("9P file server enabled\n");
 //    }
-    EnableVTMode();
+    if (_isatty(STDIN_FILENO)) {
+        EnableVTMode();
+        is_console = 1;
+    } else {
+        setvbuf(stdin, NULL, _IONBF, BUFSIZ);
+        hStdIn = GetStdHandle(STD_INPUT_HANDLE);
+    }
     while (continue_terminal) {
         uint8_t buf[1];
         if (rx_timeout(buf, 1, 0) != SERIAL_TIMEOUT) {
@@ -372,13 +381,24 @@ void terminal_mode(int runterm_mode, int pst_mode)
                 fflush(stdout);
             }
         }
-        else if (kbhit()) {
-            buf[0] = getch();
-            if (buf[0] == EXIT_CHAR0 || buf[0] == EXIT_CHAR1) {
-                waitAtExit = 0; // user chose to quit
-                break;
+        else if (is_console) {
+            if (kbhit()) {
+                buf[0] = getch();
+                if (buf[0] == EXIT_CHAR0 || buf[0] == EXIT_CHAR1) {
+                    waitAtExit = 0; // user chose to quit
+                    break;
+                }
+                tx(buf, 1);
             }
-            tx(buf, 1);
+        } else {
+            if (PeekNamedPipe(hStdIn, NULL, 0, NULL, NULL, NULL)) {
+                buf[0] = getchar();
+                if (buf[0] == EXIT_CHAR0 || buf[0] == EXIT_CHAR1) {
+                    waitAtExit = 0; // user chose to quit
+                    break;
+                }
+                tx(buf, 1);
+            }
         }
     }
 
