@@ -392,8 +392,9 @@ void terminal_mode(int runterm_mode, int pst_mode)
             }
         } else {
             if (PeekNamedPipe(hStdIn, NULL, 0, NULL, NULL, NULL)) {
-                buf[0] = getchar();
-                if (buf[0] == EXIT_CHAR0 || buf[0] == EXIT_CHAR1) {
+                int c = getchar();
+                buf[0] = c & 0xff;
+                if (c == -1 || buf[0] == EXIT_CHAR0 || buf[0] == EXIT_CHAR1) {
                     waitAtExit = 0; // user chose to quit
                     break;
                 }

@@ -451,6 +451,7 @@ void terminal_mode(int runterm_mode, int pst_mode)
                           sawexit_valid = 1;
                         } else if (buf[i] == 1 && check_for_files) {
                             int r = u9fs_process(cnt - (i+1), &buf[i+1]);
+//                            printf("u9fs_process(%d) returned: %d\n", cnt - (i+1), r);
                             i += (r-1);
                             sawexit_char = 0;
                             break;
@@ -474,7 +475,13 @@ void terminal_mode(int runterm_mode, int pst_mode)
                 }
             }
             if (FD_ISSET(STDIN_FILENO, &set)) {
-                if ((cnt = read(STDIN_FILENO, buf, sizeof(buf))) > 0) {
+                cnt = read(STDIN_FILENO, buf, sizeof(buf));
+                if (cnt == 0) {
+                    // EOF on stdin: bail
+                    waitAtExit = 0;
+                    goto done;
+                }
+                if (cnt > 0) {
                     int i;
                     for (i = 0; i < cnt; ++i) {
                         //printf("%02x\n", buf[i]);
