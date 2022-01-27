@@ -121,7 +121,7 @@ static void Usage(const char *msg)
         printf("%s\n", msg);
     }
 printf("\
-loadp2 - a loader for the propeller 2 - version 0.052 " __DATE__ "\n\
+loadp2 - a loader for the propeller 2 - version 0.053 " __DATE__ "\n\
 usage: loadp2\n\
          [ -p port ]               serial port\n\
          [ -b baud ]               user baud rate (default is %d)\n\
@@ -142,6 +142,7 @@ usage: loadp2\n\
          [ -RTS ]                  use RTS for reset\n\
          [ -xDEBUG ]               enter ROM debug monitor\n\
          [ -xTAQOZ ]               enter ROM version of TAQOZ\n\
+         [ -xTERM ]                enter terminal, avoid reset\n\
          [ -CHIP ]                 set load mode for CHIP\n\
          [ -FPGA ]                 set load mode for FPGA\n\
          [ -PATCH ]                patch in clock frequency and serial parms\n\
@@ -920,6 +921,9 @@ int main(int argc, char **argv)
                         enter_rom = ENTER_TAQOZ;
                     } else if (!strcmp(monitor, "DEBUG")) {
                         enter_rom = ENTER_DEBUG;
+                    } else if (!strcmp(monitor, "TERM")) {
+                        do_hwreset = 0;
+                        runterm = 1;
                     } else {
                         Usage("Unknown monitor option after -x");
                     }
