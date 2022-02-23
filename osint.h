@@ -5,6 +5,7 @@
   *
  * Copyright (c) 2009 by John Steven Denson
  * Modified in 2011 by David Michael Betz
+ * Modified in 2022 by Eric R. Smith
  *
  * MIT License                                                           
  *
@@ -27,8 +28,8 @@
  * THE SOFTWARE.
  * 
  */
-#ifndef __SERIAL_IO_H__
-#define __SERIAL_IO_H__
+#ifndef SERIAL_IO_H__
+#define SERIAL_IO_H__
 
 #include <stdint.h>
 
