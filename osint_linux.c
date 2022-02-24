@@ -5,6 +5,7 @@
  *
  * Copyright (c) 2009 by John Steven Denson
  * Modified in 2011 by David Michael Betz
+ * Modified in 2019-2022 by Eric R. Smith
  *
  * MIT License                                                           
  *

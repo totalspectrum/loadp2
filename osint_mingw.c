@@ -3,7 +3,7 @@
  *
  * Copyright (c) 2011 by Steve Denson.
  * Modified in 2011 by David Michael Betz
- * Modified in 2019 by Eric Smith
+ * Modified in 2019-2022 by Eric Smith
  *
  * MIT License                                                           
  *
