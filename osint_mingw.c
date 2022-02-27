@@ -351,6 +351,9 @@ void terminal_mode(int runterm_mode, int pst_mode)
         setvbuf(stdin, NULL, _IONBF, BUFSIZ);
         hStdIn = GetStdHandle(STD_INPUT_HANDLE);
     }
+    fflush(stdout);
+    fflush(stderr);
+    setvbuf(stdout, NULL, _IONBF, 1); // stdout should be unbuffered
     while (continue_terminal) {
         uint8_t buf[1];
         if (rx_timeout(buf, 1, 0) != SERIAL_TIMEOUT) {
