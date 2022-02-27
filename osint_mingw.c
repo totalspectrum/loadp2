@@ -324,6 +324,42 @@ void EnableVTMode()
     SetConsoleMode(hIn, dwMode);
 }
     
+//
+// routines to asynchronously read from stdin
+//
+
+static int readAsync(uint8_t *buf, int len)
+{
+    HANDLE stdinHandle = GetStdHandle(STD_INPUT_HANDLE);
+    DWORD bytesAvail = 1;
+    DWORD maxRead = len;
+    DWORD didRead = 0;
+    DWORD kind;
+
+    kind = GetFileType(stdinHandle);
+    if (kind == FILE_TYPE_PIPE) {
+        if (!PeekNamedPipe(stdinHandle, NULL, 0, NULL, &bytesAvail, NULL)) {
+            return -1;
+        }
+    } else if (kind == FILE_TYPE_CHAR) {
+        int got = 0;
+        int ch;
+        while (_kbhit()) {
+            ch = _getch();
+            buf[got++] = ch;
+        }
+        return got;
+    }
+    if (maxRead > bytesAvail) maxRead = bytesAvail;
+    if (!bytesAvail) {
+        return 0;
+    }
+    if (ReadFile(stdinHandle, (void *)buf, maxRead, &didRead, NULL) && didRead > 0) {
+        return didRead;
+    }
+    return -1;
+}
+
 /*
  * if "check_for_exit" is true, then
  * a sequence EXIT_CHAR 00 nn indicates that we should exit
@@ -338,18 +374,15 @@ void terminal_mode(int runterm_mode, int pst_mode)
     int continue_terminal = 1;
     int check_for_exit = runterm_mode != 0;
     int check_for_files = runterm_mode & 2;
-    int is_console = 0;
-    HANDLE hStdIn = INVALID_HANDLE_VALUE;
+    int cnt, i;
     
 //    if (check_for_files) {
 //        printf("9P file server enabled\n");
 //    }
     if (_isatty(STDIN_FILENO)) {
         EnableVTMode();
-        is_console = 1;
     } else {
         setvbuf(stdin, NULL, _IONBF, BUFSIZ);
-        hStdIn = GetStdHandle(STD_INPUT_HANDLE);
     }
     fflush(stdout);
     fflush(stderr);
@@ -384,28 +417,21 @@ void terminal_mode(int runterm_mode, int pst_mode)
                 fflush(stdout);
             }
         }
-        else if (is_console) {
-            if (kbhit()) {
-                buf[0] = getch();
-                if (buf[0] == EXIT_CHAR0 || buf[0] == EXIT_CHAR1) {
-                    waitAtExit = 0; // user chose to quit
-                    break;
+        // check for user typing
+        cnt = readAsync(buf, sizeof(buf));
+        if (cnt < 0) {
+            continue_terminal = 0; // end of file
+        } else if (cnt > 0) {
+            for (i = 0; i < cnt; i++) {
+                if (buf[i] == EXIT_CHAR0 || buf[i] == EXIT_CHAR1) {
+                    waitAtExit = 0;
+                    goto done;
                 }
-                tx(buf, 1);
             }
-        } else {
-            if (PeekNamedPipe(hStdIn, NULL, 0, NULL, NULL, NULL)) {
-                int c = getchar();
-                buf[0] = c & 0xff;
-                if (c == -1 || buf[0] == EXIT_CHAR0 || buf[0] == EXIT_CHAR1) {
-                    waitAtExit = 0; // user chose to quit
-                    break;
-                }
-                tx(buf, 1);
-            }
+            tx(buf, cnt);
         }
     }
-
+done:
     if (check_for_exit && sawexit_valid) {
         promptexit(exitcode);
     }
