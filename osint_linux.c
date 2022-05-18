@@ -58,6 +58,8 @@ static struct termios old_sparm;
 static unsigned long last_baud = -1;
 static char last_port[PATH_MAX];
 
+extern int ignoreEof; /* in main file */
+
 /* normally we use DTR for reset but setting this variable to non-zero will use RTS instead */
 static int use_rts_for_reset = 0;
 
@@ -477,7 +479,7 @@ void terminal_mode(int runterm_mode, int pst_mode)
             }
             if (FD_ISSET(STDIN_FILENO, &set)) {
                 cnt = read(STDIN_FILENO, buf, sizeof(buf));
-                if (cnt == 0) {
+                if (cnt == 0 && !ignoreEof) {
                     // EOF on stdin: bail
                     waitAtExit = 0;
                     goto done;

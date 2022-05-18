@@ -85,6 +85,8 @@ static int force_zero = 0;  /* default to zeroing memory */
 static int do_hwreset = 1;
 static int fifo_size = DEFAULT_FIFO_SIZE;
 
+int ignoreEof = 0;
+
 /* duplicate a string, useful if our original string might
  * not be modifiable
  */
@@ -121,7 +123,7 @@ static void Usage(const char *msg)
         printf("%s\n", msg);
     }
 printf("\
-loadp2 - a loader for the propeller 2 - version 0.054 " __DATE__ "\n\
+loadp2 - a loader for the propeller 2 - version 0.055 " __DATE__ "\n\
 usage: loadp2\n\
          [ -p port ]               serial port\n\
          [ -b baud ]               user baud rate (default is %d)\n\
@@ -149,6 +151,7 @@ usage: loadp2\n\
          [ -NOZERO ]               do not clear memory before download (default)\n\
          [ -ZERO ]                 clear memory before download\n\
          [ -SINGLE ]               set load mode for single stage\n\
+         [ -NOEOF ]                ignore EOF on input\n\
          filespec                  file to load\n\
          [ -e script ]             send a sequence of characters after starting P2\n\
 ", user_baud, loader_baud, clock_freq, clock_mode, DEFAULT_FIFO_SIZE);
@@ -962,6 +965,8 @@ int main(int argc, char **argv)
                 serial_use_rts_for_reset(0);
             else if (!strcmp(argv[i], "-RTS"))
                 serial_use_rts_for_reset(1);
+            else if (!strcmp(argv[i], "-NOEOF"))
+                ignoreEof = 1;
             else
             {
                 printf("Invalid option %s\n", argv[i]);
