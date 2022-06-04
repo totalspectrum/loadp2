@@ -35,7 +35,7 @@
 
 /* default FIFO size of FT231X in P2-EVAL board and PropPlugs */
 //#define DEFAULT_FIFO_SIZE   512
-#define DEFAULT_FIFO_SIZE   1024 /* seems to work better */
+#define DEFAULT_FIFO_SIZE   2048 /* seems to work better */
 
 #define NO_ENTER    0
 #define ENTER_TAQOZ 1
@@ -123,7 +123,7 @@ static void Usage(const char *msg)
         printf("%s\n", msg);
     }
 printf("\
-loadp2 - a loader for the propeller 2 - version 0.055 " __DATE__ "\n\
+loadp2 - a loader for the propeller 2 - version 0.056 " __DATE__ "\n\
 usage: loadp2\n\
          [ -p port ]               serial port\n\
          [ -b baud ]               user baud rate (default is %d)\n\
