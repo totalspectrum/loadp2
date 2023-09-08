@@ -1,7 +1,7 @@
 /*
  *
  * Copyright (c) 2017-2019 by Dave Hein
- * Copyright (c) 2019-2022 Total Spectrum Software Inc.
+ * Copyright (c) 2019-2023 Total Spectrum Software Inc.
  * Based on p2load written by David Betz
  *
  * MIT License
@@ -33,6 +33,9 @@
 #include "osint.h"
 #include "loadelf.h"
 
+#define ARGV_MAGIC ('A' | ('R' << 8) | ('G'<<16) | ('v'<<24))
+#define ARGV_MAX_BYTES 1024
+
 /* default FIFO size of FT231X in P2-EVAL board and PropPlugs */
 //#define DEFAULT_FIFO_SIZE   512
 #define DEFAULT_FIFO_SIZE   1024 /* seems to work better */
@@ -56,6 +59,8 @@ static int use_checksum = 1;
 static int quiet_mode = 0;
 static int enter_rom = NO_ENTER;
 static char *send_script = NULL;
+static int mem_argv_bytes = 0;
+static char *mem_argv_data = NULL;
 
 int get_loader_baud(int ubaud, int lbaud);
 static void RunScript(char *script);
@@ -123,7 +128,7 @@ static void Usage(const char *msg)
         printf("%s\n", msg);
     }
 printf("\
-loadp2 - a loader for the propeller 2 - version 0.057 " __DATE__ "\n\
+loadp2 - a loader for the propeller 2 - version 0.060 " __DATE__ "\n\
 usage: loadp2\n\
          [ -p port ]               serial port\n\
          [ -b baud ]               user baud rate (default is %d)\n\
@@ -154,6 +159,7 @@ usage: loadp2\n\
          [ -NOEOF ]                ignore EOF on input\n\
          filespec                  file to load\n\
          [ -e script ]             send a sequence of characters after starting P2\n\
+         [ -a arg1 [arg2 ...] ]    put arguments for program into memory\n\
 ", user_baud, loader_baud, clock_freq, clock_mode, DEFAULT_FIFO_SIZE);
 printf("\n\
 In -CHIP mode, filespec may optionally be multiple files with address\n\
@@ -481,6 +487,7 @@ static char *getNextFile(char *fname, char **next_p, int *address_p)
     char *next = fname;
 
     if (!*fname) {
+        *next_p = NULL;
         return NULL;
     }
     if (*fname == '@') {
@@ -502,6 +509,29 @@ static char *getNextFile(char *fname, char **next_p, int *address_p)
     return fname;
 }
 
+static int verify_chksum(unsigned chksum)
+{
+    unsigned recv_chksum = 0;
+    int num;
+    wait_drain();
+    msleep(1+fifo_size*10*1000/loader_baud);
+    num = rx_timeout((uint8_t *)buffer, 3, 400);
+    if (num != 3) {
+        printf("ERROR: timeout waiting for checksum at end: got %d\n", num);
+        printf("Try increasing the FIFO setting if not large enough for your setup\n");
+        promptexit(1);
+    }
+    recv_chksum = (buffer[0] - '@') << 4;
+    recv_chksum += (buffer[1] - '@');
+    chksum &= 0xff;
+    if (recv_chksum != (chksum & 0xff)) {
+        printf("ERROR: bad checksum, expected %02x got %02x (chksum characters %c%c%c)\n", chksum, recv_chksum, buffer[0], buffer[1], buffer[2]);
+        promptexit(1);
+    }
+    if (verbose) printf("chksum: %x OK\n", recv_chksum);
+    return 0;
+}
+
 int loadfile(char *fname, int address)
 {
     int num, size;
@@ -516,9 +546,17 @@ int loadfile(char *fname, int address)
             printf("ERROR: -SINGLE can only load at address 0\n");
             promptexit(1);
         }
+        if (mem_argv_bytes != 0) {
+            printf("ERROR: ARGv is not compatible with LOAD_SINGLE\n");
+            promptexit(1);
+        }
         return loadfilesingle(fname);
     }
     if (load_mode == LOAD_FPGA) {
+        if (mem_argv_bytes != 0) {
+            printf("ERROR: ARGv is not compatible with LOAD_FPGAn");
+            promptexit(1);
+        }
         return loadfileFPGA(fname, address);
     }
     
@@ -573,8 +611,9 @@ int loadfile(char *fname, int address)
     
     do {
         fname = getNextFile(fname, &next_fname, &address);
-        if (!next_fname) break; /* no more files */
-
+        if (!next_fname) {
+            break; /* no more files */
+        }
         if (*next_fname == '+') {
             next_fname++;
             send_size = 1;
@@ -626,30 +665,32 @@ int loadfile(char *fname, int address)
             }
         }
         // receive checksum, verify it
-        int recv_chksum = 0;
-        wait_drain();
-        msleep(1+fifo_size*10*1000/loader_baud);
-        num = rx_timeout((uint8_t *)buffer, 3, 400);
-        if (num != 3) {
-            printf("ERROR: timeout waiting for checksum at end: got %d\n", num);
-            printf("Try increasing the FIFO setting if not large enough for your setup\n");
-            return 1;
-        }
-        recv_chksum = (buffer[0] - '@') << 4;
-        recv_chksum += (buffer[1] - '@');
-        chksum &= 0xff;
-        if (recv_chksum != (chksum & 0xff)) {
-            printf("ERROR: bad checksum, expected %02x got %02x (chksum characters %c%c%c)\n", chksum, recv_chksum, buffer[0], buffer[1], buffer[2]);
-            promptexit(1);
-        }
-        if (verbose) printf("chksum: %x OK\n", recv_chksum);
-        if (*fname) {
+        verify_chksum(chksum);
+        if (mem_argv_bytes || *fname) {
             // more files to send
             tx_raw_byte('+');
         } else {
             tx_raw_byte('-');
         }
+        wait_drain();
     } while (*fname);
+
+    if (mem_argv_bytes) {
+        /* send ARGv info to $FC000 */
+        if (verbose) printf("sending %d arg bytes\n", mem_argv_bytes);
+        tx_raw_long(0xFC000);
+        tx_raw_long(mem_argv_bytes);
+        chksum = 0;
+        for (int i = 0; i < mem_argv_bytes; i++) {
+            chksum += mem_argv_data[i];
+        }
+        tx((uint8_t *)mem_argv_data, mem_argv_bytes);
+        verify_chksum(chksum);
+        mem_argv_bytes = 0;
+        tx_raw_byte('-'); // all done
+        wait_drain();
+    }
+
     msleep(100);
     return 0;
 }
@@ -823,6 +864,15 @@ int main(int argc, char **argv)
                     Usage("Missing parameter for -p");
                 }
             }
+            else if (argv[i][1] == 'a' || !strcmp(argv[i], "--args"))
+            {
+                i++;
+                if (i >= argc) {
+                    // allow for 0 arguments to be explicitly passed
+                    argc++;
+                }
+                break;
+            }
             else if (argv[i][1] == 'b')
             {
                 if(argv[i][2])
@@ -980,6 +1030,29 @@ int main(int argc, char **argv)
         }
     }
 
+    if (i < argc) {
+        mem_argv_bytes = 5; // for ARGv plus trailing 0
+        // find length of all arguments
+        for (int j = i; j < argc && argv[j]; j++) {
+            mem_argv_bytes += strlen(argv[j]) + 1; // include trailing 0
+        }
+        if (mem_argv_bytes >= ARGV_MAX_BYTES) {
+            printf("Argument list too long (%d bytes, maximum is %d)\n",
+                   mem_argv_bytes, ARGV_MAX_BYTES);
+            promptexit(1);
+        }
+        mem_argv_data = (char *)calloc(1, mem_argv_bytes);
+        char *ptr = mem_argv_data;
+        *ptr++ = 'A';
+        *ptr++ = 'R';
+        *ptr++ = 'G';
+        *ptr++ = 'v';
+        for (int j = i; j < argc && argv[j]; j++) {
+            strcpy(ptr, argv[j]);
+            ptr += strlen(argv[j]) + 1;
+        }
+        // do not have to 0 terminate, we used calloc above
+    }
     if (enter_rom) {
         if (fname) {
             printf("Entering ROM is incompatible with downloading a file\n");

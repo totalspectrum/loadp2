@@ -11,6 +11,7 @@ loadp2 is used to load programs to the memory of a Parallax Propeller 2 ("P2") c
 
 ```
 usage: loadp2
+         filespec                  file(s) to load
          [ -p port ]               serial port
          [ -b baud ]               user baud rate (default is 115200)
          [ -l baud ]               loader baud rate (default is 2000000)
@@ -32,8 +33,8 @@ usage: loadp2
          [ -ZERO ]                 clear memory before download
          [ -NOZERO ]               do not clear memory before download (default)
          [ -SINGLE ]               set load mode for single stage
-         filespec                  file(s) to load
 	 [ -e script ]             execute script after loading
+	 [ -a ] or [ --args ]      remaining arguments are passed to loaded program at $FC000
 ```
 
 ## Loading multiple files
