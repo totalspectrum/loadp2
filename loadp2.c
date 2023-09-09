@@ -35,6 +35,7 @@
 
 #define ARGV_MAGIC ('A' | ('R' << 8) | ('G'<<16) | ('v'<<24))
 #define ARGV_MAX_BYTES 1024
+#define ARGC_MAX_ITEMS 32
 
 /* default FIFO size of FT231X in P2-EVAL board and PropPlugs */
 //#define DEFAULT_FIFO_SIZE   512
@@ -1031,14 +1032,21 @@ int main(int argc, char **argv)
     }
 
     if (i < argc) {
+        int num_argc = 1;
         mem_argv_bytes = 5; // for ARGv plus trailing 0
         // find length of all arguments
         for (int j = i; j < argc && argv[j]; j++) {
             mem_argv_bytes += strlen(argv[j]) + 1; // include trailing 0
+            num_argc++;
         }
         if (mem_argv_bytes >= ARGV_MAX_BYTES) {
             printf("Argument list too long (%d bytes, maximum is %d)\n",
                    mem_argv_bytes, ARGV_MAX_BYTES);
+            promptexit(1);
+        }
+        if (num_argc >= ARGC_MAX_ITEMS) {
+            printf("Too many arguments (%d provided, maximum is %d)\n",
+                   num_argc, ARGC_MAX_ITEMS);
             promptexit(1);
         }
         mem_argv_data = (char *)calloc(1, mem_argv_bytes);
