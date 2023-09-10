@@ -33,8 +33,9 @@
 #include "osint.h"
 #include "loadelf.h"
 
+#define ARGV_ADDR  0xFC000
 #define ARGV_MAGIC ('A' | ('R' << 8) | ('G'<<16) | ('v'<<24))
-#define ARGV_MAX_BYTES 1024
+#define ARGV_MAX_BYTES 1020
 #define ARGC_MAX_ITEMS 32
 
 /* default FIFO size of FT231X in P2-EVAL board and PropPlugs */
@@ -679,7 +680,7 @@ int loadfile(char *fname, int address)
     if (mem_argv_bytes) {
         /* send ARGv info to $FC000 */
         if (verbose) printf("sending %d arg bytes\n", mem_argv_bytes);
-        tx_raw_long(0xFC000);
+        tx_raw_long(ARGV_ADDR);
         tx_raw_long(mem_argv_bytes);
         chksum = 0;
         for (int i = 0; i < mem_argv_bytes; i++) {
