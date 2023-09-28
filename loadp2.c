@@ -457,8 +457,9 @@ int loadfilesingle(char *fname)
         tx( (uint8_t *)buffer, strlen(buffer) );
         tx((uint8_t *)"?", 1);
         wait_drain();
-        msleep(100+fifo_size*10*1000/loader_baud);
-        num = rx_timeout((uint8_t *)buffer, 1, 100);
+        //msleep(100+fifo_size*10*1000/loader_baud);
+        //num = rx_timeout((uint8_t *)buffer, 1, 100);
+        num = rx_timeout((uint8_t *)buffer, 1, 100 + fifo_size*10000/loader_baud);
         if (num >= 0) buffer[num] = 0;
         else buffer[0] = 0;
         if (strcmp(buffer, "."))
@@ -477,7 +478,7 @@ int loadfilesingle(char *fname)
         msleep(fifo_size*10*1000/loader_baud);
     }
 
-    msleep(100);
+//    msleep(100);
     if (verbose) printf("%s loaded\n", fname);
     return 0;
 }
@@ -571,8 +572,9 @@ static int verify_chksum(unsigned chksum)
     unsigned recv_chksum = 0;
     int num;
     wait_drain();
-    msleep(1+fifo_size*10*1000/loader_baud);
-    num = rx_timeout((uint8_t *)buffer, 3, 400);
+    //msleep(1+fifo_size*10*1000/loader_baud);
+    //num = rx_timeout((uint8_t *)buffer, 3, 400);
+    num = rx_timeout((uint8_t *)buffer, 3, 400 + fifo_size*10000/loader_baud);
     if (num != 3) {
         printf("ERROR: timeout waiting for checksum at end: got %d\n", num);
         printf("Try increasing the FIFO setting if not large enough for your setup\n");
