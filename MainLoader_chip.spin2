@@ -26,15 +26,10 @@ begin
 		test	flagbits, #FLAGBIT_ZERO wz
 	if_z	jmp	#skipzero
 		'' zero out memory
-		wrfast	#0,#0
-		mov	pb, ##$7c000/16
-zeroloop
-		wflong	zeros
-		wflong	zeros
-		wflong	zeros
-		wflong	zeros
-		djnz	pb, #zeroloop
-		rdfast	#0,#0			' wait for last byte to be written
+		mov	pb, ##$7c000/16 - 1
+		mov	ptrb, #0
+		setq	pb
+		wrlong	#0, ptrb
 skipzero
 
 restart		
@@ -200,12 +195,9 @@ autobaud
 		waitpat
                 getct   waitbit 
 
-		sub     waitbit, a
-		ret
+	_ret_	sub     waitbit, a
 
 
-zeros
-		long	0
 startaddr	long	-1			'starting address
 waitbit		long	99999
 
