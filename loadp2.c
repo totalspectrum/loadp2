@@ -49,6 +49,7 @@
 #define LOAD_CHIP   0
 #define LOAD_FPGA   1
 #define LOAD_SINGLE 2
+#define LOAD_SPI    3
 
 static int loader_baud = 2000000;
 static int clock_mode = -1;
@@ -81,6 +82,7 @@ static void RunScript(char *script);
 
 #include "MainLoader_fpga.h"
 #include "MainLoader_chip.h"
+#include "flash_loader.h"
 
 static int32_t ibuf[256];
 static int32_t ibin[32];
@@ -130,7 +132,7 @@ static void Usage(const char *msg)
         printf("%s\n", msg);
     }
 printf("\
-loadp2 - a loader for the propeller 2 - version 0.060 " __DATE__ "\n\
+loadp2 - a loader for the propeller 2 - version 0.070 " __DATE__ "\n\
 usage: loadp2\n\
          [ -p port ]               serial port\n\
          [ -b baud ]               user baud rate (default is %d)\n\
@@ -154,10 +156,11 @@ usage: loadp2\n\
          [ -xTERM ]                enter terminal, avoid reset\n\
          [ -CHIP ]                 set load mode for CHIP\n\
          [ -FPGA ]                 set load mode for FPGA\n\
-         [ -PATCH ]                patch in clock frequency and serial parms\n\
          [ -NOZERO ]               do not clear memory before download (default)\n\
          [ -ZERO ]                 clear memory before download\n\
+         [ -PATCH ]                patch in clock frequency and serial parms\n\
          [ -SINGLE ]               set load mode for single stage\n\
+         [ -SPI ]                  like -SINGLE, but copies application to SPI flash\n\
          [ -NOEOF ]                ignore EOF on input\n\
          filespec                  file to load\n\
          [ -e script ]             send a sequence of characters after starting P2\n\
@@ -235,9 +238,11 @@ int g_fileptr;
 
 /*
  * read an ELF file into memory
+ * optionally prepends a block of data
+ * to the file (if prepend_data is non-NULL)
  */
-int
-readElfFile(FILE *infile, ElfHdr *hdr)
+static int
+readElfFile(FILE *infile, ElfHdr *hdr, uint8_t *prepend_data, int prepend_size)
 {
     ElfContext *c;
     ElfProgramHdr program;
@@ -245,6 +250,7 @@ readElfFile(FILE *infile, ElfHdr *hdr)
     unsigned int base = -1;
     unsigned int top = 0;
     int i, r;
+    uint8_t *program_mem;
     
     c = OpenElfFile(infile, hdr);
     if (!c) {
@@ -277,12 +283,20 @@ readElfFile(FILE *infile, ElfHdr *hdr)
         printf("image size %d bytes is too large to handle\n", size);
         return -1;
     }
+    size += prepend_size;
     g_filedata = (uint8_t *)calloc(1, size);
     if (!g_filedata) {
         printf("Could not allocate %d bytes\n", size);
         return -1;
     }
     g_filesize = size;
+    if (prepend_data && prepend_size > 0) {
+        program_mem = g_filedata + prepend_size;
+        memcpy(g_filedata, prepend_data, prepend_size);
+    } else {
+        program_mem = g_filedata;
+    }
+    
     for (i = 0; i < c->hdr.phnum; i++) {
         if (!LoadProgramTableEntry(c, i, &program)) {
             printf("Error reading ELF program header %d\n", i);
@@ -292,7 +306,7 @@ readElfFile(FILE *infile, ElfHdr *hdr)
             continue;
         }
         fseek(infile, program.offset, SEEK_SET);
-        r = fread(g_filedata + program.paddr - base, 1, program.filesz, infile);
+        r = fread(program_mem + program.paddr - base, 1, program.filesz, infile);
         if (r != program.filesz) {
             printf("read error in ELF file\n");
             return -1;
@@ -307,14 +321,18 @@ readElfFile(FILE *infile, ElfHdr *hdr)
  * sets g_filedata to point to the data, 
  * and g_filesize to the length
  * returns g_filesize, or -1 on error
+ * if prepend_data is non-NULL and prepend_size > 0,
+ * then that data is prepended to the total to be downloaded
  */
 
-int 
-readBinaryFile(char *fname)
+static int 
+readBinaryFile(char *fname, uint8_t *prepend_data, int prepend_size)
 {
     int size;
+    int fsize;
     FILE *infile;
     ElfHdr hdr;
+    uint8_t *progbase;
     
     g_fileptr = 0;
     infile = fopen(fname, "rb");
@@ -325,21 +343,31 @@ readBinaryFile(char *fname)
     }
     if (ReadAndCheckElfHdr(infile, &hdr)) {
         /* this is an ELF file, load using ReadElf instead */
-        return readElfFile(infile, &hdr);
+        return readElfFile(infile, &hdr, prepend_data, prepend_size);
     } else {
         //printf("not an ELF file\n");
     }
     
     fseek(infile, 0, SEEK_END);
-    size = ftell(infile);
+    fsize = ftell(infile);
     fseek(infile, 0, SEEK_SET);
+    size = fsize + prepend_size;
     g_filedata = (uint8_t *)malloc(size);
     if (!g_filedata) {
         printf("Could not allocate %d bytes\n", size);
         return -1;
     }
-    size = g_filesize = fread(g_filedata, 1, size, infile);
+    if (prepend_data && prepend_size) {
+        memcpy(g_filedata, prepend_data, prepend_size);
+    }
+    progbase = g_filedata + prepend_size;
+    fsize = fread(progbase, 1, fsize, infile);
     fclose(infile);
+    if (fsize <= 0) {
+        size = g_filesize = fsize;
+    } else {
+        size = g_filesize = fsize + prepend_size;
+    }
     return size;
 }
 
@@ -359,6 +387,25 @@ loadBytes(char *buffer, int size)
     return r;
 }
 
+static void
+patchBinaryFileForFlash(int total_size, int header_len) {
+    int size = total_size;
+    uint32_t *lptr;
+    uint32_t chksum = 0;
+    if (size & 3) {
+        printf("Error: flashing a file that is not a multiple of 4 bytes long\n");
+        promptexit(1);
+    }
+    lptr = (uint32_t *)g_filedata;
+    lptr[2] = 0;                    // NOP out the DEBUG flag *before* calculating checksum
+    size /= 4;
+    for (int i = 0; i < size; i++) {
+        chksum += lptr[i];
+    }
+    lptr = (uint32_t *)g_filedata;  // go to the header
+    lptr[1] = -chksum;              // patch in the - chksum
+}
+
 int loadfilesingle(char *fname)
 {
     int num, size, i;
@@ -366,7 +413,15 @@ int loadfilesingle(char *fname)
     int totnum = 0;
     int checksum = 0;
 
-    size = readBinaryFile(fname);
+    if (load_mode == LOAD_SPI) {
+        size = readBinaryFile(fname, (uint8_t *)flash_loader_bin, flash_loader_bin_len);
+        // need to patch up the binary
+        if (size > 0) {
+            patchBinaryFileForFlash(size, flash_loader_bin_len);
+        }
+    } else {
+        size = readBinaryFile(fname, NULL, 0);
+    }
     if (size < 0) {
         return 1;
     }
@@ -413,7 +468,7 @@ int loadfilesingle(char *fname)
             promptexit(1);
         }
         if (verbose)
-            printf("Checksum validated\n");
+            printf("Checksum (0x%08x) validated\n", checksum);
     }
     else
     {
@@ -440,7 +495,7 @@ int loadfileFPGA(char *fname, int address)
     int patch = patch_mode;
     unsigned chksum = 0;
 
-    size = readBinaryFile(fname);
+    size = readBinaryFile(fname, NULL, 0);
     if (size < 0)
     {
         printf("Could not open %s\n", fname);
@@ -543,13 +598,13 @@ int loadfile(char *fname, int address)
     char *next_fname = NULL;
     int send_size;
     
-    if (load_mode == LOAD_SINGLE) {
+    if (load_mode == LOAD_SINGLE || load_mode == LOAD_SPI) {
         if (address != 0) {
-            printf("ERROR: -SINGLE can only load at address 0\n");
+            printf("ERROR: -SINGLE and -SPI can only load at address 0\n");
             promptexit(1);
         }
         if (mem_argv_bytes != 0) {
-            printf("ERROR: ARGv is not compatible with LOAD_SINGLE\n");
+            printf("ERROR: ARGv is not compatible with -SINGLE and -SPI\n");
             promptexit(1);
         }
         return loadfilesingle(fname);
@@ -622,7 +677,7 @@ int loadfile(char *fname, int address)
         } else {
             send_size = 0;
         }
-        size = readBinaryFile(next_fname);
+        size = readBinaryFile(next_fname, NULL, 0);
         if (size < 0)
         {
             printf("Could not open %s\n", next_fname);
@@ -1009,7 +1064,10 @@ int main(int argc, char **argv)
                 load_mode = LOAD_FPGA;
             else if (!strcmp(argv[i], "-SINGLE"))
                 load_mode = LOAD_SINGLE;
-            else if (!strcmp(argv[i], "-NOZERO"))
+            else if (!strcmp(argv[i], "-SPI")) {
+                load_mode = LOAD_SPI;
+                use_checksum = 0; /* checksum calculation throws off flash loader */
+            } else if (!strcmp(argv[i], "-NOZERO"))
                 force_zero = 0;
             else if (!strcmp(argv[i], "-ZERO"))
                 force_zero = 1;
