@@ -51,6 +51,8 @@
 #define LOAD_SINGLE 2
 #define LOAD_SPI    3
 
+#define ROUND_UP(x) (((x)+3) & ~3)
+
 static int loader_baud = 2000000;
 static int clock_mode = -1;
 static int user_baud = 115200;
@@ -351,7 +353,7 @@ readBinaryFile(char *fname, uint8_t *prepend_data, int prepend_size)
     fseek(infile, 0, SEEK_END);
     fsize = ftell(infile);
     fseek(infile, 0, SEEK_SET);
-    size = fsize + prepend_size;
+    size = ROUND_UP(fsize + prepend_size);
     g_filedata = (uint8_t *)malloc(size);
     if (!g_filedata) {
         printf("Could not allocate %d bytes\n", size);
@@ -366,7 +368,10 @@ readBinaryFile(char *fname, uint8_t *prepend_data, int prepend_size)
     if (fsize <= 0) {
         size = g_filesize = fsize;
     } else {
-        size = g_filesize = fsize + prepend_size;
+        if (ROUND_UP(fsize) != size) {
+            printf("WARNING: short read of file\n");
+        }
+        size = g_filesize = ROUND_UP(fsize + prepend_size);
     }
     return size;
 }
