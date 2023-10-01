@@ -274,6 +274,13 @@ getfcallnew(int fd, Fcall *fc, int have)
         } else {
             read_from_have = totallen;
         }
+#if 0
+        printf("about to call convM2S:\n");
+        for (int i = 0; i < totallen; i++) {
+            printf("  %02x", rxbuf[i]);
+        }
+        printf("\n");
+#endif        
 	if( (r = convM2S(rxbuf, totallen, fc)) != totallen) {
             sysfatal("badly sized message type %d: expected %d got %d", rxbuf[0], totallen, r);
             return read_from_have;
