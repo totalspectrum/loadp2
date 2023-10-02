@@ -363,12 +363,13 @@ readBinaryFile(char *fname, uint8_t *prepend_data, int prepend_size)
         memcpy(g_filedata, prepend_data, prepend_size);
     }
     progbase = g_filedata + prepend_size;
+    int origFsize = fsize;
     fsize = fread(progbase, 1, fsize, infile);
     fclose(infile);
     if (fsize <= 0) {
         size = g_filesize = fsize;
     } else {
-        if (ROUND_UP(fsize) != size) {
+        if (fsize != origFsize) {
             printf("WARNING: short read of file\n");
         }
         size = g_filesize = ROUND_UP(fsize + prepend_size);
