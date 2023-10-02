@@ -416,7 +416,6 @@ int loadfilesingle(char *fname)
 {
     int num, size, i;
     int patch = patch_mode;
-    int totnum = 0;
     int checksum = 0;
 
     if (load_mode == LOAD_SPI) {
@@ -452,7 +451,6 @@ int loadfilesingle(char *fname)
             sprintf( &buffer[i*3], " %2.2x", binbuffer[i] & 255 );
         strcat(buffer, " > ");
         tx( (uint8_t *)buffer, strlen(buffer) );
-        totnum += num;
     }
     if (use_checksum)
     {
@@ -498,9 +496,7 @@ static unsigned flag_bits()
 int loadfileFPGA(char *fname, int address)
 {
     int num, size;
-    int totnum = 0;
     int patch = patch_mode;
-    unsigned chksum = 0;
 
     size = readBinaryFile(fname, NULL, 0);
     if (size < 0)
@@ -525,7 +521,6 @@ int loadfileFPGA(char *fname, int address)
     if (verbose) printf("Loading %s - %d bytes\n", fname, size);
     while ((num=loadBytes(buffer, 1024)))
     {
-        int i;
         if (patch)
         {
             patch = 0;
@@ -534,10 +529,6 @@ int loadfileFPGA(char *fname, int address)
             memcpy(&buffer[0x1c], &user_baud, 4);
         }
         tx((uint8_t *)buffer, num);
-        totnum += num;
-        for (i = 0; i < num; i++) {
-            chksum += buffer[i];
-        }
     }
     wait_drain();
     msleep(100);
@@ -600,7 +591,6 @@ static int verify_chksum(unsigned chksum)
 int loadfile(char *fname, int address)
 {
     int num, size;
-    int totnum = 0;
     int patch = patch_mode;
     unsigned chksum;
     char *next_fname = NULL;
@@ -724,7 +714,6 @@ int loadfile(char *fname, int address)
                 memcpy(&buffer[0x1c], &user_baud, 4);
             }
             tx((uint8_t *)buffer, num);
-            totnum += num;
             for (i = 0; i < num; i++) {
                 chksum += buffer[i];
             }
