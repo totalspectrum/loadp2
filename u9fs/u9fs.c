@@ -529,9 +529,11 @@ rwalk(Fcall *rx, Fcall *tx)
 
 	path = estrdup(fid->path);
 	e = nil;
-	for(i=0; i<rx->nwname; i++)
+	for(i=0; i<rx->nwname; i++) {
 		if(userwalk(fid->u, &path, rx->wname[i], &tx->wqid[i], &e) < 0)
 			break;
+                //printf("walk: path=[%s]\n", path);
+        }
 
 	if(i == rx->nwname){		/* successful clone or walk */
 		tx->nwqid = i;
@@ -956,7 +958,7 @@ rwstat(Fcall *rx, Fcall *tx)
 	Fid *fid;
 
 	if((fid = oldfid(rx->fid, &e)) == nil){
-                printf("wstat: oldfid failed\n");
+            	//printf("wstat: oldfid failed\n");
 		seterror(tx, e);
 		return;
 	}
@@ -969,13 +971,13 @@ rwstat(Fcall *rx, Fcall *tx)
 	 * half broken and return an error.  it's hardly perfect.
 	 */
 	if(convM2D(rx->stat, rx->nstat, &d, (char*)rx->stat) <= BIT16SZ){
-                printf("wstat: convM2D failed\n");
+            	//printf("wstat: convM2D failed\n");
 		seterror(tx, Ewstatbuffer);
 		return;
 	}
 
 	if(fidstat(fid, &e) < 0){
-                printf("wstat: fidstat failed\n");
+            	//printf("wstat: fidstat failed\n");
 		seterror(tx, e);
 		return;
 	}
@@ -994,7 +996,6 @@ rwstat(Fcall *rx, Fcall *tx)
 
 		g = gname2user(d.gid);
 		if(g == nil){
-                        printf("wstat: unknown group\n");                   
 			seterror(tx, Eunknowngroup);
 			return;
 		}
@@ -1056,12 +1057,11 @@ rwstat(Fcall *rx, Fcall *tx)
 	if(d.name[0]){
 		old = fid->path;
 		dir = estrdup(fid->path);
-		if((p = strrchr(dir, '/')) > dir)
+		if((p = strrchr(dir, '/')) >= dir)
 			*p = '\0';
 		else{
-                        *dir = 0;
-			//seterror(tx, "whoops: found no / in old path");
-			//return;
+			seterror(tx, "whoops: found no / in old path");
+			return;
 		}
 		new = estrpath(dir, d.name, 1);
 		npath = rootpath(new);

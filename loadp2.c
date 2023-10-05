@@ -134,7 +134,7 @@ static void Usage(const char *msg)
         printf("%s\n", msg);
     }
 printf("\
-loadp2 - a loader for the propeller 2 - version 0.070 " __DATE__ "\n\
+loadp2 - a loader for the propeller 2 - version 0.071 " __DATE__ "\n\
 usage: loadp2\n\
          [ -p port ]               serial port\n\
          [ -b baud ]               user baud rate (default is %d)\n\
