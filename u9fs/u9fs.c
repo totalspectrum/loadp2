@@ -282,7 +282,7 @@ getfcallnew(int fd, Fcall *fc, int have)
         printf("\n");
 #endif        
 	if( (r = convM2S(rxbuf, totallen, fc)) != totallen) {
-            sysfatal("badly sized message type %d: expected %d got %d", rxbuf[0], totallen, r);
+            sysfatal("badly sized message type %d: expected %d got %d", rxbuf[4], totallen, r);
             return read_from_have;
         }
         return read_from_have;
@@ -956,6 +956,7 @@ rwstat(Fcall *rx, Fcall *tx)
 	Fid *fid;
 
 	if((fid = oldfid(rx->fid, &e)) == nil){
+                printf("wstat: oldfid failed\n");
 		seterror(tx, e);
 		return;
 	}
@@ -968,11 +969,13 @@ rwstat(Fcall *rx, Fcall *tx)
 	 * half broken and return an error.  it's hardly perfect.
 	 */
 	if(convM2D(rx->stat, rx->nstat, &d, (char*)rx->stat) <= BIT16SZ){
+                printf("wstat: convM2D failed\n");
 		seterror(tx, Ewstatbuffer);
 		return;
 	}
 
 	if(fidstat(fid, &e) < 0){
+                printf("wstat: fidstat failed\n");
 		seterror(tx, e);
 		return;
 	}
@@ -991,6 +994,7 @@ rwstat(Fcall *rx, Fcall *tx)
 
 		g = gname2user(d.gid);
 		if(g == nil){
+                        printf("wstat: unknown group\n");                   
 			seterror(tx, Eunknowngroup);
 			return;
 		}
@@ -1055,11 +1059,13 @@ rwstat(Fcall *rx, Fcall *tx)
 		if((p = strrchr(dir, '/')) > dir)
 			*p = '\0';
 		else{
-			seterror(tx, "whoops: can't happen in u9fs");
-			return;
+                        *dir = 0;
+			//seterror(tx, "whoops: found no / in old path");
+			//return;
 		}
 		new = estrpath(dir, d.name, 1);
 		npath = rootpath(new);
+                //printf("wstat: checkpath(%s, %s) && rename(%s, %s)\n", old, new, opath, npath);
 		if(strcmp(old, new) != 0 && rename(opath, npath) < 0){
 			if(chatty9p)
 				fprint(2, "rename(%s, %s) failed\n", old, new);
