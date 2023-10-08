@@ -3895,7 +3895,7 @@ FRESULT f_read (
 	UINT rcnt, cc, csect;
 	BYTE *rbuff = (BYTE*)buff;
 
-
+        rcnt = 0;
 	*br = 0;	/* Clear read byte counter */
 	res = validate(&fp->obj, &fs);				/* Check validity of the file object */
 	if (res != FR_OK || (res = (FRESULT)fp->err) != FR_OK) LEAVE_FF(fs, res);	/* Check validity */
@@ -3995,7 +3995,7 @@ FRESULT f_write (
 	UINT wcnt, cc, csect;
 	const BYTE *wbuff = (const BYTE*)buff;
 
-
+        wcnt = 0;
 	*bw = 0;	/* Clear write byte counter */
 	res = validate(&fp->obj, &fs);			/* Check validity of the file object */
 	if (res != FR_OK || (res = (FRESULT)fp->err) != FR_OK) LEAVE_FF(fs, res);	/* Check validity */
@@ -5699,6 +5699,7 @@ static FRESULT create_partition (
 	DWORD sz_drv32, s_lba32, n_lba32;
 	BYTE *pte, hd, n_hd, sc, n_sc;
 
+        n_lba32 = 0; /* makes the compiler happy, but not really needed */
 	/* Get drive size */
 	if (disk_ioctl(drv, GET_SECTOR_COUNT, &sz_drv) != RES_OK) return FR_DISK_ERR;
 
