@@ -71,7 +71,7 @@ $(BUILD):
 	mkdir -p $(BUILD)
 
 %.h: %.bin
-	xxd -i $< > $@
+	xxd -i $< $@
 
 SD_SRCS=board/sdcard/Makefile board/sdcard/sdboot.c board/sdcard/sdmm.c board/sdcard/ff.c board/sdcard/diskio.h board/sdcard/ffconf.h board/sdcard/ff.c
 
