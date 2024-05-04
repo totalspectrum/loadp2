@@ -134,7 +134,7 @@ static void Usage(const char *msg)
         printf("%s\n", msg);
     }
 printf("\
-loadp2 - a loader for the propeller 2 - version 0.071 " __DATE__ "\n\
+loadp2 - a loader for the propeller 2 - version 0.072 " __DATE__ "\n\
 usage: loadp2\n\
          [ -p port ]               serial port\n\
          [ -b baud ]               user baud rate (default is %d)\n\
@@ -162,7 +162,8 @@ usage: loadp2\n\
          [ -ZERO ]                 clear memory before download\n\
          [ -PATCH ]                patch in clock frequency and serial parms\n\
          [ -SINGLE ]               set load mode for single stage\n\
-         [ -SPI ]                  like -SINGLE, but copies application to SPI flash\n\
+         [ -FLASH ]                like -SINGLE, but copies application to SPI flash\n\
+         [ -SPI ]                  alias for -FLASH\n\
          [ -NOEOF ]                ignore EOF on input\n\
          filespec                  file to load\n\
          [ -e script ]             send a sequence of characters after starting P2\n\
@@ -598,11 +599,11 @@ int loadfile(char *fname, int address)
     
     if (load_mode == LOAD_SINGLE || load_mode == LOAD_SPI) {
         if (address != 0) {
-            printf("ERROR: -SINGLE and -SPI can only load at address 0\n");
+            printf("ERROR: -SINGLE and -FLASH can only load at address 0\n");
             promptexit(1);
         }
         if (mem_argv_bytes != 0) {
-            printf("ERROR: ARGv is not compatible with -SINGLE and -SPI\n");
+            printf("ERROR: ARGv is not compatible with -SINGLE and -FLASH\n");
             promptexit(1);
         }
         return loadfilesingle(fname);
@@ -1061,7 +1062,7 @@ int main(int argc, char **argv)
                 load_mode = LOAD_FPGA;
             else if (!strcmp(argv[i], "-SINGLE"))
                 load_mode = LOAD_SINGLE;
-            else if (!strcmp(argv[i], "-SPI")) {
+            else if (!strcmp(argv[i], "-SPI") || !strcmp(argv[i], "-FLASH") ) {
                 load_mode = LOAD_SPI;
                 use_checksum = 0; /* checksum calculation throws off flash loader */
             } else if (!strcmp(argv[i], "-NOZERO"))
