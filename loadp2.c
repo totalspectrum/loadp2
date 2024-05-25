@@ -1,7 +1,7 @@
 /*
  *
  * Copyright (c) 2017-2019 by Dave Hein
- * Copyright (c) 2019-2023 Total Spectrum Software Inc.
+ * Copyright (c) 2019-2024 Total Spectrum Software Inc.
  * Based on p2load written by David Betz
  *
  * MIT License
@@ -30,6 +30,7 @@
 #include <string.h>
 #include <stdint.h>
 #include <ctype.h>
+#include <stdbool.h>
 #include "osint.h"
 #include "loadelf.h"
 
@@ -316,6 +317,88 @@ readElfFile(FILE *infile, ElfHdr *hdr, uint8_t *prepend_data, int prepend_size)
         }
     }
     //printf("ELF: total size = %d\n", size);
+    return size;
+}
+
+static int verify_chksum(unsigned chksum); // forward declaration
+
+//
+// send a block of bytes from a file
+//
+int
+loadBytesFromFile(FILE *infile, uint32_t address, uint32_t size)
+{
+    int num, i;
+    unsigned chksum;
+    int cum = 0;
+    
+    // send header to device
+    tx_raw_long(address);
+    tx_raw_long(size);
+    chksum = 0;
+
+    while (size > 0) {
+        num = fread(buffer, 1, (size > 1024) ? 1024 : size, infile);
+        if (!num) break;
+        size -= num;
+        tx((uint8_t *)buffer, num);
+        for (i = 0; i < num; i++) {
+            chksum += buffer[i];
+        }
+        cum += num;
+        //printf("sent %d / %d bytes bytes chksum=%x\n", num, cum, chksum);
+    }
+    // receive checksum, verify it
+    verify_chksum(chksum);
+    return size;
+}
+
+//
+// try loading the individual sections of an ELF file
+// returns true if it was an ELF, even if we had trouble with it
+//
+static int
+loadElfSections(const char *fname)
+{
+    ElfHdr hdr;
+    ElfContext *c;
+    ElfProgramHdr program;
+    int i, size;
+    FILE *f = fopen(fname, "rb");
+    bool need_continue = false;
+    
+    if (!f) return -1;
+    if (!ReadAndCheckElfHdr(f, &hdr)) {
+        // not an ELF file
+        fclose(f);
+        return -1;
+    }
+    c = OpenElfFile(f, &hdr);
+    if (!c) {
+        fclose(f);
+        return false;
+    }
+    size = 0;
+    /* walk through the program table */
+    for (i = 0; i < c->hdr.phnum; i++) {
+        if (!LoadProgramTableEntry(c, i, &program)) {
+            printf("Error reading ELF program header %d\n", i);
+            continue;
+        }
+        if (program.type != PT_LOAD) {
+            continue;
+        }
+        if (verbose) printf("load %d bytes at 0x%x\n", program.filesz, program.paddr);
+        fseek(f, program.offset, SEEK_SET);
+        if (need_continue) {
+            tx_raw_byte('+');
+        }
+        size += loadBytesFromFile(f, program.paddr, program.filesz);
+        need_continue = true;
+    }
+    // done sending data
+    //tx_raw_byte('-'); done by caller so they can handle ARGV
+    fclose(f);
     return size;
 }
 
@@ -673,6 +756,17 @@ int loadfile(char *fname, int address)
         if (*next_fname == '+') {
             next_fname++;
             send_size = 1;
+        } else if (address == 0 && (send_size = loadElfSections(next_fname)) >= 0) {
+            // ELF files loaded at 0 get loaded differently,
+            // we can map the sections directly into HUB RAM
+            // or even copy some parts to external memory
+            if (mem_argv_bytes || *fname) {
+                tx_raw_byte('+');
+            } else {
+                tx_raw_byte('-');
+            }
+            if (verbose) printf("Loaded %d bytes from ELF file %s\n", send_size, next_fname);
+            continue;
         } else {
             send_size = 0;
         }
@@ -718,6 +812,7 @@ int loadfile(char *fname, int address)
             for (i = 0; i < num; i++) {
                 chksum += buffer[i];
             }
+            //printf("sent %d bytes chksum=%x\n", num, chksum);
         }
         // receive checksum, verify it
         verify_chksum(chksum);
