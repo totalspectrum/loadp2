@@ -82,6 +82,12 @@ read_file
 		'' read file size
 		call	#ser_rx_long
 		mov	filesize, rxlong
+
+		'' respond that we are ready to stream data in
+		mov	temp, #"s"
+		call	#ser_tx
+
+		'' and get the data
 		wrfast	#0,loadaddr		'ready to write entire memory starting at address
 		nop		       		' give time to settle
 		

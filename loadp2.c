@@ -323,6 +323,33 @@ readElfFile(FILE *infile, ElfHdr *hdr, uint8_t *prepend_data, int prepend_size)
 static int verify_chksum(unsigned chksum); // forward declaration
 
 //
+// send address and size, and get back the device's response, which
+// may be one of:
+// 's' : go ahead and stream data
+// 'w' : wait for a while (device is busy e.g. erasing flash)
+// 'e' : error
+//
+int
+sendAddressSize(uint32_t address, uint32_t size)
+{
+    uint8_t resp[4];
+    int r;
+    tx_raw_long(address);
+    tx_raw_long(size);
+    do {
+        r = rx_timeout(resp, 1, 500);
+        if (r != 1) {
+            printf("sendAddressSize: timeout\n");
+            return 't';
+        }
+        r = resp[0];
+        if (verbose)
+            printf("device response to header: `%c'\n", r);
+    } while (r == 'w'); // device is requesting us to wait
+    return r;
+}
+
+//
 // send a block of bytes from a file
 //
 int
@@ -330,11 +357,15 @@ loadBytesFromFile(FILE *infile, uint32_t address, uint32_t size)
 {
     int num, i;
     unsigned chksum;
-    int cum = 0;
+    int sent = 0;
+    int mode;
     
     // send header to device
-    tx_raw_long(address);
-    tx_raw_long(size);
+    mode = sendAddressSize(address, size);
+    if (mode != 's') {
+        printf("Device reported unknown mode '%c'\n", mode);
+        return -1;
+    }
     chksum = 0;
 
     while (size > 0) {
@@ -345,12 +376,12 @@ loadBytesFromFile(FILE *infile, uint32_t address, uint32_t size)
         for (i = 0; i < num; i++) {
             chksum += buffer[i];
         }
-        cum += num;
-        //printf("sent %d / %d bytes bytes chksum=%x\n", num, cum, chksum);
+        sent += num;
+        //printf("sent %d / %d bytes bytes chksum=%x\n", num, sent, chksum);
     }
     // receive checksum, verify it
     verify_chksum(chksum);
-    return size;
+    return sent;
 }
 
 //
@@ -678,7 +709,9 @@ int loadfile(char *fname, int address)
     int patch = patch_mode;
     unsigned chksum;
     char *next_fname = NULL;
-    int send_size;
+    int send_size = 0;
+    int orig_size = 0;
+    int mode;
     
     if (load_mode == LOAD_SINGLE || load_mode == LOAD_SPI) {
         if (address != 0) {
@@ -776,26 +809,30 @@ int loadfile(char *fname, int address)
             printf("Could not open %s\n", next_fname);
             return 1;
         }
-
+        orig_size = size;
+        
         /* OK, now send the address and file size */
         if (verbose) printf("Sending header\n");
-        tx_raw_long(address);
         if (send_size) {
-            int effective_size = size + 4;
-            // prefix the file data with 4 bytes of size
-            tx_raw_long(effective_size);
-            address += effective_size;
-            tx_raw_long(size);
+            size += 4;
+        }
+        mode = sendAddressSize(address, size);
+        // check response
+        if (mode != 's') {
+            printf("Device does not support streaming\n");
+            return 1;
+        }
+        if (send_size) {
+            tx_raw_long(orig_size);
             // initialize the checksum to the data we just sent
-            chksum = size & 0xff;
-            chksum += (size>>8) & 0xff;
-            chksum += (size>>16) & 0xff;
-            chksum += (size>>24) & 0xff;
+            chksum = orig_size & 0xff;
+            chksum += (orig_size>>8) & 0xff;
+            chksum += (orig_size>>16) & 0xff;
+            chksum += (orig_size>>24) & 0xff;
         } else {
-            tx_raw_long(size);
-            address += size;
             chksum = 0;
         }
+        address += size;
 
         if (verbose) printf("Loading %s - %d bytes\n", next_fname, size);
         while ((num=loadBytes(buffer, 1024)))
