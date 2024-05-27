@@ -1,0 +1,70 @@
+''
+'' loader for high memory
+'' flash version
+''
+'' this will be loaded to $FC000 and run from there,
+'' so hub addresses need to be relocatable
+''
+'' The main loader will call the original entry point at
+'' $FC000, which should do any initialization and return
+'' a pointer to a mailbox to use in ptra
+''
+'' This initialization should generally consist of firing
+'' up a COG which will handle the writes asynchonously
+'' (so the main code can continue to handle serial I/O).
+''
+'' When the main loader needs to write data, it will set up
+'' the mailbox like:
+''    +0 = hub address (non-zero, also not -1)
+''    +4 = flash address
+''    +8 = size in bytes (currently always <=1K)
+''
+'' when the writer is finished, it should overwrite these with:
+''    +0 = 0 (indicates finished)
+''    +4 = status (0 for OK, -1 for error)
+''
+'' when the main loader is completely finished, it will set
+'' the hub address to -1: this indicates to the writer that it should
+'' shut down
+''
+'' The initialization code is allowed to use pa, pb, ptra, and ptrb
+'' as well as registers $1d0-$1e0
+''
+dat
+	orgh
+enter:
+	mov	pa, #16
+	loc	pb, #code
+	loc	ptra, #mailbox
+	setq	ptra
+	coginit pa, pb
+	ret
+mailbox
+	long    0[4]
+code
+
+''
+'' the actual driver code
+'' entered with ptra pointing at the mailbox
+'' (we'll leave it that way)
+''
+	org	0
+	' blink #56
+mainloop
+	setq	#3
+	rdlong	params, ptra
+	tjnz	params, #process_request
+	drvnot  #56
+	waitx   ##11_000_000
+	jmp	#mainloop
+
+process_request
+	tjf	params, #endit
+	jmp	#mainloop
+endit
+	drvh	#56
+	cogid	pb
+	cogstop	pb
+
+params
+	res	4

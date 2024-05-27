@@ -86,6 +86,7 @@ static void RunScript(char *script);
 #include "MainLoader_fpga.h"
 #include "MainLoader_chip.h"
 #include "flash_loader.h"
+#include "himem_flash.h"
 
 static int32_t ibuf[256];
 static int32_t ibin[32];
@@ -96,6 +97,9 @@ int waitAtExit = 0;
 static int force_zero = 0;  /* default to zeroing memory */
 static int do_hwreset = 1;
 static int fifo_size = DEFAULT_FIFO_SIZE;
+
+static uint8_t *himem_bin;
+static uint32_t himem_size;
 
 int ignoreEof = 0;
 
@@ -166,6 +170,7 @@ usage: loadp2\n\
          [ -FLASH ]                like -SINGLE, but copies application to SPI flash\n\
          [ -SPI ]                  alias for -FLASH\n\
          [ -NOEOF ]                ignore EOF on input\n\
+         [ -HIMEM=flash ]          addresses 0x8000000 and up refer to flash\n\
          filespec                  file to load\n\
          [ -e script ]             send a sequence of characters after starting P2\n\
          [ -a arg1 [arg2 ...] ]    put arguments for program into memory\n\
@@ -739,6 +744,8 @@ int loadfile(char *fname, int address)
     txstring((uint8_t *)MainLoader_chip_bin, MainLoader_chip_bin_len);
     txval(clock_mode);
     txval(flag_bits());
+    txval(0); // reserved
+    txval(0); // also reserved
     tx((uint8_t *)"~", 1);
     
     {
@@ -776,6 +783,21 @@ int loadfile(char *fname, int address)
         }
     }
 
+    // if a himem helper is present, download it to $FC000 and run it
+    if (himem_bin) {
+        mode = sendAddressSize(0xFC000, himem_size);
+        if (mode == 's') {
+            chksum = 0;
+            tx(himem_bin, himem_size);
+            for (unsigned i = 0; i < himem_size; i++) {
+                chksum += himem_bin[i];
+            }
+            verify_chksum(chksum);
+            tx_raw_byte('!'); // tell device to execute this plugin
+        } else {
+            printf("Unexpected response while downloading himem helper; ignoring\n");
+        }
+    }
     // we want to be able to insert 0 characters in fname
     // in order to break up multiple file names into different strings
     // so we have to copy it to a duplicate buffer
@@ -1197,9 +1219,18 @@ int main(int argc, char **argv)
             else if (!strcmp(argv[i], "-SPI") || !strcmp(argv[i], "-FLASH") ) {
                 load_mode = LOAD_SPI;
                 use_checksum = 0; /* checksum calculation throws off flash loader */
-            } else if (!strcmp(argv[i], "-NOZERO"))
+            } else if (!strncmp(argv[i], "-HIMEM=", 7)) {
+                char *himem_kind = argv[i] + 7;
+                if (!strcmp(himem_kind, "flash")) {
+                    himem_bin = (uint8_t *)himem_flash_bin;
+                    himem_size = himem_flash_bin_len;
+                } else {
+                    printf("Unknown HIMEM memory type %s\n", himem_kind);
+                    Usage(NULL);
+                }
+            } else if (!strcmp(argv[i], "-NOZERO")) {
                 force_zero = 0;
-            else if (!strcmp(argv[i], "-ZERO"))
+            } else if (!strcmp(argv[i], "-ZERO"))
                 force_zero = 1;
             else if (!strcmp(argv[i], "-DTR"))
                 serial_use_rts_for_reset(0);

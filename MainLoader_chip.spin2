@@ -16,6 +16,7 @@ CON
 		
 		FLAGBIT_ZERO = $1		' if set, zero HUB memory
 		FLAGBIT_PATCHED = $2		' if set, clock frequency was patched into binary
+
   '' smart pin modes
   ser_txmode       = %0000_0000_000_0000000000000_01_11110_0 'async tx mode, output enabled for smart output
   ser_rxmode       = %0000_0000_000_0000000000000_00_11111_0 'async rx mode, input  enabled for smart input
@@ -23,6 +24,7 @@ CON
 DAT		org
 
 begin
+		mov	mailbox, #0
 		test	flagbits, #FLAGBIT_ZERO wz
 	if_z	jmp	#skipzero
 		'' zero out memory
@@ -69,6 +71,7 @@ restart
 setup
 		mov	chksum, #0
 		call	#send_chksum
+
 read_file
 		mov	chksum, #0
 		'' read file address
@@ -107,19 +110,32 @@ read_file
 		drvh	#dbg_pin
 #endif		
 		'' check host response
+		call	#ser_rx
+		'' if they send "!" then execute the code we just downloaded
+		cmp	rxbyte, #"!" wz
+	if_nz	jmp	#.noexec
+		call	startaddr
+		'' response is in ptra (a mailbox)
+		mov	mailbox, ptra
+		neg	startaddr, #1
+		jmp	#read_file
+.noexec
 		'' if they send "+" then look for another file
-		call	 #ser_rx
-		cmp	 rxbyte, #"+" wz
-	if_z	jmp	 #read_file
-	
-		waitx	##80_000_000/10		' short pause to ensure sync
+		cmp	rxbyte, #"+" wz
+	if_z	jmp	#read_file
 		
+		waitx	##80_000_000/10		' short pause to ensure sync
+
+		'' shut down auxiliary cog
+		cmp	mailbox, #0 wz
+	if_nz	wrlong	##-1, mailbox		' send shutdown request
+
 		'' shut down smart pins
 		dirl	#tx_pin
 		dirl	#rx_pin
 		wrpin	#0, #tx_pin
 		wrpin	#0, #rx_pin
-		
+
 		' switch to new clock mode, maybe
 		' if the binary was patched with -PATCH then we
 		' set the clock mode to clkmode_
@@ -223,3 +239,4 @@ chksum		res	1
 mask		res	1
 port		res	1
 a		res	1
+mailbox		res	1
