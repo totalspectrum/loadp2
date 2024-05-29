@@ -32,7 +32,7 @@
 ''
 dat
 	orgh
-enter:
+enter
 	mov	pa, #16
 	loc	pb, #code
 	loc	ptra, #mailbox
@@ -41,6 +41,12 @@ enter:
 	ret
 mailbox
 	long    0[4]
+' error messages must follow mailbox
+err_badaddr
+	byte "Address must be a multiple of 256", 0
+
+	' and here comes the code
+	alignl
 code
 
 ''
@@ -54,21 +60,25 @@ code
 mainloop
 	setq	#3
 	rdlong	params, ptra
-	tjz	params, #mainloop
+	tjz	hubaddr, #mainloop
 
 	' process the request
 process_request
-	tjf	params, #endit	' address of -1 means quit
+	tjf	hubaddr, #endit		' address of -1 means quit
 
+	test	ouraddr, #$FF wz	' check for bottom address bits all 0
+ if_nz	jmp	#bad_address
+ 
 	' for now just toggle the pin
-	drvh	#56
-	waitx	##2_000_000
 	drvl	#56
-	waitx	##2_000_000
+	waitx	##18_000_000
+	drvh	#56
+	waitx	##18_000_000
 
 	' and clear the response
 	mov	params+0, #0
 	mov	params+1, #0
+send_response
 	setq	#1
 	wrlong	params, ptra
 	
@@ -78,5 +88,20 @@ endit
 	cogid	pb
 	cogstop	pb
 
+bad_address
+	mov	params+0, #0
+	mov	params+1, ptra
+	add	params+1, #(@err_badaddr-@mailbox)
+	jmp	#send_response
+
+	' and our variables
 params
-	res	4
+hubaddr
+	res	1
+ouraddr
+	res	1
+size
+	res	1
+reserved
+	res	1
+
