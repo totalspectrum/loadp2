@@ -49,17 +49,29 @@ code
 '' (we'll leave it that way)
 ''
 	org	0
-	' blink #56
+
+	' wait for request to arrive in mailbox
 mainloop
 	setq	#3
 	rdlong	params, ptra
-	tjnz	params, #process_request
-	drvnot  #56
-	waitx   ##11_000_000
-	jmp	#mainloop
+	tjz	params, #mainloop
 
+	' process the request
 process_request
-	tjf	params, #endit
+	tjf	params, #endit	' address of -1 means quit
+
+	' for now just toggle the pin
+	drvh	#56
+	waitx	##22_000_000
+	drvl	#56
+	waitx	##22_000_000
+
+	' and clear the response
+	mov	params+0, #0
+	mov	params+1, #0
+	setq	#1
+	wrlong	params, ptra
+	
 	jmp	#mainloop
 endit
 	drvh	#56

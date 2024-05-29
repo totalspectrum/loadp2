@@ -86,6 +86,10 @@ read_file
 		call	#ser_rx_long
 		mov	filesize, rxlong
 
+		'' check for himem (bit 31 of address set)
+		testb	 loadaddr, #31 wc
+	if_c	jmp	 #use_himem
+
 		'' respond that we are ready to stream data in
 		mov	temp, #"s"
 		call	#ser_tx
@@ -103,6 +107,7 @@ read_file
 
                 rdfast  #0,#0                   'wait for last byte to be written
 
+done_file
 		'' respond to host
 		call	#send_chksum
 
@@ -155,7 +160,66 @@ read_file
 start_cog
 		waitx	 ##25_000_000/10
 		coginit	#0,startaddr		'launch cog 0 from starting address
+		'' never returns
 
+		''
+		'' routine to load code into high memory
+		'' via the mailbox set up earlier
+		''
+use_himem
+		tjz	mailbox, #no_himem
+
+		'' set up to receive ping-pong data in the upper 2K of memory
+		mov	pingpong, ##$7FC00
+next_buffer
+		xor	pingpong, onek
+		mov	bufsiz, onek
+		cmp	filesize, onek wcz	' if filesize < 1K
+	if_c	mov	bufsiz, filesize	' use that as the buffer size
+
+		'' set up mailbox data for this buffer
+		mov	mailinfo+0, pingpong
+		mov	mailinfo+1, loadaddr
+		mov	mailinfo+2, bufsiz
+		
+		'' tell the host to send us the next data
+		mov	temp, #"k"
+		call	#ser_tx
+
+		'' and now receive the data
+		mov	ptrb, loadaddr
+		mov	pb, bufsiz
+.buf_lp
+		call	#ser_rx
+		wrbyte	rxbyte, ptrb++
+		add	chksum, rxbyte
+		djnz	pb, #.buf_lp
+
+		'' chunk received
+		'' make sure himem cog is free
+.wait_himem
+		rdlong	pa, mailbox wz
+	if_nz	jmp	#.wait_himem
+
+		'' write out the mailbox info (4 longs)
+		setq	#3
+		wrlong	mailinfo, mailbox
+
+		'' now move on to the next chunk
+		add	loadaddr, bufsiz
+		sub	filesize, bufsiz wcz
+	if_nz	jmp	#next_buffer
+	
+		'' all done file
+		jmp    #done_file
+
+		'' no mailbox set up, return an error for himem
+no_himem
+		mov	temp, #"e"
+		call	#ser_tx
+		jmp	#read_file
+
+' send the current checksum back to the host
 send_chksum
 		mov	temp, chksum
 		shr	temp, #4
@@ -222,6 +286,7 @@ autobaud
 
 startaddr	long	-1			'starting address
 waitbit		long	99999
+onek		long	1024
 
 		orgf	$100
 		'' the first two values here are set up by loadp2
@@ -239,4 +304,7 @@ chksum		res	1
 mask		res	1
 port		res	1
 a		res	1
-mailbox		res	1
+mailbox		res	1			' address of himem mailbox
+pingpong	res	1			' ping pong buffer address
+bufsiz		res	1			' current size of ping pong buffer
+mailinfo	res	4			' info to store in himem mailbox

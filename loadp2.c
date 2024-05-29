@@ -339,6 +339,7 @@ sendAddressSize(uint32_t address, uint32_t size)
 {
     uint8_t resp[4];
     int r;
+    if (verbose) printf("address=0x%08x size=%x\n", address, size);
     tx_raw_long(address);
     tx_raw_long(size);
     do {
@@ -498,7 +499,7 @@ readBinaryFile(char *fname, uint8_t *prepend_data, int prepend_size)
 }
 
 int
-loadBytes(char *buffer, int size)
+loadBytesFromGBuf(char *buffer, int size)
 {
     int r = 0;
     if (!g_filedata) {
@@ -553,7 +554,7 @@ int loadfilesingle(char *fname)
     if (verbose) printf("Loading %s - %d bytes\n", fname, size);
     tx((uint8_t *)"> Prop_Hex 0 0 0 0", 18);
 
-    while ((num=loadBytes(binbuffer, 128)))
+    while ((num=loadBytesFromGBuf(binbuffer, 128)))
     {
         if (patch)
         {
@@ -639,7 +640,7 @@ int loadfileFPGA(char *fname, int address)
     tx((uint8_t *)"~", 1);
     msleep(200);
     if (verbose) printf("Loading %s - %d bytes\n", fname, size);
-    while ((num=loadBytes(buffer, 1024)))
+    while ((num=loadBytesFromGBuf(buffer, 1024)))
     {
         if (patch)
         {
@@ -857,7 +858,7 @@ int loadfile(char *fname, int address)
         address += size;
 
         if (verbose) printf("Loading %s - %d bytes\n", next_fname, size);
-        while ((num=loadBytes(buffer, 1024)))
+        while ((num=loadBytesFromGBuf(buffer, 1024)))
         {
             int i;
             if (patch)
