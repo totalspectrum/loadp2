@@ -198,11 +198,9 @@ next_buffer
 		'' chunk received
 		'' make sure himem cog is free
 .wait_himem
-		rdlong	resp, mailbox wz
-	if_nz	jmp	#.wait_himem
-		add	mailbox, #4
-		rdlong	resp+1, mailbox
-		sub	mailbox, #4
+		setq	#1
+		rdlong	resp, mailbox
+		tjnz	resp,	#.wait_himem
 		tjnz	resp+1, #himem_error 	' check for hub finished w. error
 
 		'' write out the mailbox info (4 longs)
