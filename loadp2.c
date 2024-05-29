@@ -370,6 +370,10 @@ downloadData(uint8_t *data, uint32_t address, uint32_t size)
     
     // send header to device
     mode = sendAddressSize(address, size);
+    if (mode == 'h') {
+        printf("No himem kernel loaded, but address requires it\n");
+        return -1;
+    }
     if (mode != 's' && mode != 'k') {
         printf("Device reported unknown mode '%c'\n", mode);
         return -1;
@@ -397,7 +401,16 @@ downloadData(uint8_t *data, uint32_t address, uint32_t size)
                 mode = resp[0];
             }
             if (mode != 'k') {
-                printf("Unexpected response '%c' from device\n", mode);
+                if (mode == 'e') {
+                    // read the error message
+                    uint8_t errmsg[256];
+                    int r = rx_timeout(errmsg, 255, 2000);
+                    if (r < 0) r = 0;
+                    errmsg[r] = 0;
+                    printf("Error from device: %s\n", errmsg);
+                } else {
+                    printf("Unexpected response '%c' from device\n", mode);
+                }
                 return -1;
             }
         }
@@ -737,7 +750,7 @@ static int verify_chksum(unsigned chksum)
     wait_drain();
     //msleep(1+fifo_size*10*1000/loader_baud);
     //num = rx_timeout((uint8_t *)buffer, 3, 400);
-    num = rx_timeout((uint8_t *)buffer, 3, 400 + fifo_size*10000/loader_baud);
+    num = rx_timeout((uint8_t *)buffer, 3, 2000 + fifo_size*10000/loader_baud);
     if (num != 3) {
         printf("ERROR: timeout waiting for checksum at end: got %d\n", num);
         printf("Try increasing the FIFO setting if not large enough for your setup\n");
@@ -897,7 +910,7 @@ int loadfile(char *fname, int address)
         num = downloadData(g_filedata, address, g_filesize);
 
         if (num < 0) {
-            printf("Error downloaindg %s\n", next_fname);
+            printf("Error downloading %s\n", next_fname);
             promptexit(1);
         }
         if (mem_argv_bytes || *fname) {

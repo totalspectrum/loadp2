@@ -178,9 +178,9 @@ next_buffer
 	if_c	mov	bufsiz, filesize	' use that as the buffer size
 
 		'' set up mailbox data for this buffer
-		mov	mailinfo+0, pingpong
-		mov	mailinfo+1, loadaddr
-		mov	mailinfo+2, bufsiz
+		mov	mailinfo+0, pingpong	' hub address
+		mov	mailinfo+1, loadaddr	' flash address
+		mov	mailinfo+2, bufsiz	' current size
 		
 		'' tell the host to send us the next data
 		mov	temp, #"k"
@@ -198,8 +198,12 @@ next_buffer
 		'' chunk received
 		'' make sure himem cog is free
 .wait_himem
-		rdlong	pa, mailbox wz
+		rdlong	resp, mailbox wz
 	if_nz	jmp	#.wait_himem
+		add	mailbox, #4
+		rdlong	resp+1, mailbox
+		sub	mailbox, #4
+		tjnz	resp+1, #himem_error 	' check for hub finished w. error
 
 		'' write out the mailbox info (4 longs)
 		setq	#3
@@ -215,9 +219,20 @@ next_buffer
 
 		'' no mailbox set up, return an error for himem
 no_himem
-		mov	temp, #"e"
+		mov	temp, #"h"	' no himem kernel loaded
 		call	#ser_tx
 		jmp	#read_file
+
+' relay an error message from the himem kernel
+himem_error
+		mov	temp, #"e"
+		call	#ser_tx
+		mov	ptrb, resp+1
+.eloop
+		rdbyte	temp, ptrb++ wz
+	if_z	jmp	#read_file
+		call	#ser_tx
+		jmp	#.eloop
 
 ' send the current checksum back to the host
 send_chksum
@@ -308,3 +323,4 @@ mailbox		res	1			' address of himem mailbox
 pingpong	res	1			' ping pong buffer address
 bufsiz		res	1			' current size of ping pong buffer
 mailinfo	res	4			' info to store in himem mailbox
+resp		res	4			' space for response from himem
