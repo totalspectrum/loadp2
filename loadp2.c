@@ -376,7 +376,7 @@ downloadData(uint8_t *data, uint32_t address, uint32_t size)
     }
     chksum = 0;
     while (size > 0) {
-        num = (size > 1024) ? size : size;
+        num = (size > 1024) ? 1024 : size;
         if (!num) break;
         if (verbose && mode == 'k') printf("Sending block of %d bytes\n", num);
         tx(data, num);
@@ -387,8 +387,9 @@ downloadData(uint8_t *data, uint32_t address, uint32_t size)
         sent += num;
         if (size && mode == 'k') {
             // wait for device to signal it is ready
+            // we may have to wait a long time
             uint8_t resp[4];
-            int r = rx_timeout(resp, 1, 500);
+            int r = rx_timeout(resp, 1, 10000);
             if (r != 1) {
                 printf("timeout while sending data to device\n");
                 return -1;
@@ -760,7 +761,6 @@ int loadfile(char *fname, int address)
     unsigned chksum;
     char *next_fname = NULL;
     int send_size = 0;
-    int orig_size = 0;
     int mode;
     
     if (load_mode == LOAD_SINGLE || load_mode == LOAD_SPI) {
@@ -870,56 +870,36 @@ int loadfile(char *fname, int address)
         } else {
             send_size = 0;
         }
-        size = readBinaryFile(next_fname, NULL, 0);
+        if (send_size) {
+            // prepend the 4 byte size to the data
+            size = readBinaryFile(next_fname, (uint8_t*)&size, 4);
+        } else {
+            size = readBinaryFile(next_fname, NULL, 0);
+        }
         if (size < 0)
         {
             printf("Could not open %s\n", next_fname);
             return 1;
         }
-        orig_size = size;
-        
-        /* OK, now send the address and file size */
-        if (verbose) printf("Sending header\n");
-        if (send_size) {
-            size += 4;
-        }
-        mode = sendAddressSize(address, size);
-        // check response
-        if (mode != 's') {
-            printf("Device does not support streaming\n");
-            return 1;
-        }
-        if (send_size) {
-            tx_raw_long(orig_size);
-            // initialize the checksum to the data we just sent
-            chksum = orig_size & 0xff;
-            chksum += (orig_size>>8) & 0xff;
-            chksum += (orig_size>>16) & 0xff;
-            chksum += (orig_size>>24) & 0xff;
-        } else {
-            chksum = 0;
-        }
-        address += size;
 
-        if (verbose) printf("Loading %s - %d bytes\n", next_fname, size);
-        while ((num=loadBytesFromGBuf(buffer, 1024)))
-        {
-            int i;
-            if (patch)
-            {
-                patch = 0;
+        /* patch the file data if necessary */
+        if (patch) {
+            uint8_t *buffer = (send_size) ? g_filedata+4 : g_filedata;
+            patch = 0;
+            if (g_filesize >= 0x24) {
                 memcpy(&buffer[0x14], &clock_freq, 4);
                 memcpy(&buffer[0x18], &clock_mode, 4);
                 memcpy(&buffer[0x1c], &user_baud, 4);
             }
-            tx((uint8_t *)buffer, num);
-            for (i = 0; i < num; i++) {
-                chksum += buffer[i];
-            }
-            //printf("sent %d bytes chksum=%x\n", num, chksum);
         }
-        // receive checksum, verify it
-        verify_chksum(chksum);
+        /* now send the file data from g_filedata */
+        if (verbose) printf("Loading %s - %d bytes\n", next_fname, size);
+        num = downloadData(g_filedata, address, g_filesize);
+
+        if (num < 0) {
+            printf("Error downloaindg %s\n", next_fname);
+            promptexit(1);
+        }
         if (mem_argv_bytes || *fname) {
             // more files to send
             tx_raw_byte('+');

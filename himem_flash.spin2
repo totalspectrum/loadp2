@@ -62,9 +62,9 @@ process_request
 
 	' for now just toggle the pin
 	drvh	#56
-	waitx	##22_000_000
+	waitx	##2_000_000
 	drvl	#56
-	waitx	##22_000_000
+	waitx	##2_000_000
 
 	' and clear the response
 	mov	params+0, #0
