@@ -331,6 +331,7 @@ static int verify_chksum(unsigned chksum); // forward declaration
 // send address and size, and get back the device's response, which
 // may be one of:
 // 's' : go ahead and stream data
+// 'k' : we need to send data in 1K chunks
 // 'w' : wait for a while (device is busy e.g. erasing flash)
 // 'e' : error
 //
@@ -356,38 +357,81 @@ sendAddressSize(uint32_t address, uint32_t size)
 }
 
 //
-// send a block of bytes from a file
+// download a block of data to the device at address 'address'
+// returns bytes sent to device
 //
 int
-loadBytesFromFile(FILE *infile, uint32_t address, uint32_t size)
+downloadData(uint8_t *data, uint32_t address, uint32_t size)
 {
     int num, i;
-    unsigned chksum;
+    unsigned chksum = 0;
     int sent = 0;
     int mode;
     
     // send header to device
     mode = sendAddressSize(address, size);
-    if (mode != 's') {
+    if (mode != 's' && mode != 'k') {
         printf("Device reported unknown mode '%c'\n", mode);
         return -1;
     }
     chksum = 0;
-
     while (size > 0) {
-        num = fread(buffer, 1, (size > 1024) ? 1024 : size, infile);
+        num = (size > 1024) ? size : size;
         if (!num) break;
-        size -= num;
-        tx((uint8_t *)buffer, num);
+        if (verbose && mode == 'k') printf("Sending block of %d bytes\n", num);
+        tx(data, num);
         for (i = 0; i < num; i++) {
-            chksum += buffer[i];
+            chksum += *data++;
         }
+        size -= num;
         sent += num;
-        //printf("sent %d / %d bytes bytes chksum=%x\n", num, sent, chksum);
+        if (size && mode == 'k') {
+            // wait for device to signal it is ready
+            uint8_t resp[4];
+            int r = rx_timeout(resp, 1, 500);
+            if (r != 1) {
+                printf("timeout while sending data to device\n");
+                return -1;
+            } else {
+                mode = resp[0];
+            }
+            if (mode != 'k') {
+                printf("Unexpected response '%c' from device\n", mode);
+                return -1;
+            }
+        }
     }
-    // receive checksum, verify it
+    // now verify the chksum
     verify_chksum(chksum);
+    
     return sent;
+}
+
+//
+// send a block of 'size' bytes from a file and send to device at address
+// 'address'
+//
+int
+loadBytesFromFileAtOffset(FILE *infile, uint32_t address, uint32_t size)
+{
+    uint8_t *localBuf;
+    int num;
+    
+    // get memory
+    localBuf = calloc(1, size);
+    if (!localBuf) {
+        printf("Unable to allocate %u bytes\n", size);
+        return -1;
+    }
+    num = fread(localBuf, 1, size, infile);
+    if (num != (int)size) {
+        printf("Error reading data: expected %u bytes, got %d\n", size, num);
+        return -1;
+    }
+    num = downloadData(localBuf, address, size);
+    free(localBuf);
+
+    return num;
 }
 
 //
@@ -430,7 +474,7 @@ loadElfSections(const char *fname)
         if (need_continue) {
             tx_raw_byte('+');
         }
-        size += loadBytesFromFile(f, program.paddr, program.filesz);
+        size += loadBytesFromFileAtOffset(f, program.paddr, program.filesz);
         need_continue = true;
     }
     // done sending data
