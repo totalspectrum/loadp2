@@ -10,6 +10,8 @@
 '#define DEBUG 1
 
 CON
+		R_READBURST  = $B << 28
+		R_WRITEBURST = $F << 28
 		tx_pin = 62
 		rx_pin = 63
 		dbg_pin = 56
@@ -170,7 +172,9 @@ use_himem
 		tjz	mailbox, #no_himem
 
 		'' set up to receive ping-pong data in the upper 2K of memory
-		mov	pingpong, ##$7FC00
+		'' the R_WRITEBURST command goes in the upper nybble and makes
+		'' the whole address negative, which we use to test results
+		mov	pingpong, ##$7FC00 | R_WRITEBURST
 next_buffer
 		xor	pingpong, onek
 		mov	bufsiz, onek
@@ -198,10 +202,9 @@ next_buffer
 		'' chunk received
 		'' make sure himem cog is free
 .wait_himem
-		setq	#1
-		rdlong	resp, mailbox
-		tjnz	resp,	#.wait_himem
-		tjnz	resp+1, #himem_error 	' check for hub finished w. error
+		rdlong	resp, mailbox wcz
+	if_c	jmp	#.wait_himem		' negative -> still executing command
+	if_nz	jmp	#himem_error		' positive -> error message
 
 		'' write out the mailbox info (4 longs)
 		setq	#3
@@ -211,8 +214,16 @@ next_buffer
 		add	loadaddr, bufsiz
 		sub	filesize, bufsiz wcz
 	if_nz	jmp	#next_buffer
-	
+chunks_done
 		'' all done file
+		'' wait for the final chunk to be processed
+.wait_himem
+		rdlong	resp, mailbox wcz
+	if_c	jmp	#.wait_himem		' negative -> still executing command
+	if_nz	jmp	#himem_error		' positive -> error message
+
+
+		'' and go do the next file
 		jmp    #done_file
 
 		'' no mailbox set up, return an error for himem
@@ -222,10 +233,11 @@ no_himem
 		jmp	#read_file
 
 ' relay an error message from the himem kernel
+' the error message is a non-zero HUB memory address
 himem_error
 		mov	temp, #"e"
 		call	#ser_tx
-		mov	ptrb, resp+1
+		mov	ptrb, resp
 .eloop
 		rdbyte	temp, ptrb++ wz
 	if_z	jmp	#read_file
@@ -321,4 +333,4 @@ mailbox		res	1			' address of himem mailbox
 pingpong	res	1			' ping pong buffer address
 bufsiz		res	1			' current size of ping pong buffer
 mailinfo	res	4			' info to store in himem mailbox
-resp		res	4			' space for response from himem
+resp		res	1			' space for response from himem

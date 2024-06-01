@@ -15,13 +15,14 @@
 ''
 '' When the main loader needs to write data, it will set up
 '' the mailbox like:
-''    +0 = hub address (non-zero, also not -1)
+''    +0 = hub address (with highest bit set to indicate we are running)
 ''    +4 = flash address
 ''    +8 = size in bytes (currently always <=1K)
 ''
-'' when the writer is finished, it should overwrite these with:
-''    +0 = 0 (indicates finished)
-''    +4 = status (0 for OK, -1 for error)
+'' when the writer is finished, it should overwrite the
+'' first mailbox word with either 0 (for OK) or a pointer to an
+'' error message to send back:
+''    +0 = 0 or positive error message
 ''
 '' when the main loader is completely finished, it will set
 '' the hub address to -1: this indicates to the writer that it should
@@ -43,7 +44,7 @@ mailbox
 	long    0[4]
 ' error messages must follow mailbox
 err_badaddr
-	byte "Address must be a multiple of 256", 0
+	byte "address $XXXXXXXX must be a multiple of 256", 0
 
 	' and here comes the code
 	alignl
@@ -62,6 +63,7 @@ mainloop
 	rdlong	params, ptra
 	tjz	hubaddr, #mainloop
 
+	' check initial address
 	' process the request
 process_request
 	tjf	hubaddr, #endit		' address of -1 means quit
@@ -71,15 +73,13 @@ process_request
  
 	' for now just toggle the pin
 	drvl	#56
-	waitx	##18_000_000
+	waitx	##7_000_000
 	drvh	#56
-	waitx	##18_000_000
+	waitx	##7_000_000
 
 	' and clear the response
 	mov	params+0, #0
-	mov	params+1, #0
 send_response
-	setq	#1
 	wrlong	params, ptra
 	
 	jmp	#mainloop
@@ -89,9 +89,22 @@ endit
 	cogstop	pb
 
 bad_address
-	mov	params+0, #0
-	mov	params+1, ptra
-	add	params+1, #(@err_badaddr-@mailbox)
+	mov	params, ptra
+	add	params, #(@err_badaddr-@mailbox)
+
+	' fill in the address
+	mov	pb, #8
+	mov	ptrb, params
+	add	ptrb, #9
+.addr
+	getnib	tmp, ouraddr, #7
+	rol	ouraddr, #4
+	add	tmp, #"0"
+	cmp	tmp, #"9" wcz
+  if_ae	add	tmp, #"A"-"0"
+  	wrbyte	tmp, ptrb++
+	djnz	pb, #.addr
+	
 	jmp	#send_response
 
 	' and our variables
@@ -104,4 +117,5 @@ size
 	res	1
 reserved
 	res	1
-
+tmp
+	res	1
