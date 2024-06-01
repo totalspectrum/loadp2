@@ -191,7 +191,7 @@ next_buffer
 		call	#ser_tx
 
 		'' and now receive the data
-		mov	ptrb, loadaddr
+		mov	ptrb, pingpong
 		mov	pb, bufsiz
 .buf_lp
 		call	#ser_rx

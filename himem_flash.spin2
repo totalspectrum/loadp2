@@ -31,6 +31,33 @@
 '' The initialization code is allowed to use pa, pb, ptra, and ptrb
 '' as well as registers $1d0-$1e0
 ''
+'' The actual low level flash writing code is based on SpiFlash.spin2, by
+'' Nicolas Benezan and Evan Hillas
+''
+con
+	spi_cs = 61
+	spi_ck = 60
+	spi_di = 59 ' P2 -> flash
+	spi_do = 58 ' flash -> P2
+
+        modeCLK = P_TRANSITION | P_OE | P_INVERT_OUTPUT     ' SPI_CK
+        modeTXD = P_SYNC_TX | P_INVERT_B | P_OE | ((spi_ck - spi_di) & %111)<<24 ' + P_SYNC_IO + P_FILT0_AB
+        modeRXD = P_SYNC_RX |((spi_ck - spi_do) & %111)<<24
+
+        Page_Size    = 256
+
+        Write_Disable = $04
+        Write_Enable = $06
+        Erase_4k     = $20
+        Erase_64k    = $D8
+        Write_Page   = $02
+        Read_Data    = $03
+        Read_Status  = $05
+        Reset_Enable = $66
+        Reset_Device = $99
+        Program_Resume = $7a
+        PD_Release   = $ab
+
 dat
 	orgh
 enter
@@ -57,6 +84,19 @@ code
 ''
 	org	0
 
+	' initialize
+Init
+	call	#Spi_Init
+	mov	cmd, #PD_Release
+	call	#Spi_Cmd8
+	drvh	#spi_cs
+	waitx	##22_000	' roughly 1 ms
+	mov	cmd, #Reset_Enable
+	call	#Spi_Cmd8
+	mov	cmd, #Reset_Device
+	call	#Spi_Cmd8
+	call	#Spi_Wait
+	
 	' wait for request to arrive in mailbox
 mainloop
 	setq	#3
@@ -70,15 +110,26 @@ process_request
 
 	test	ouraddr, #$FF wz	' check for bottom address bits all 0
  if_nz	jmp	#bad_address
- 
-	' for now just toggle the pin
-	drvl	#56
-	waitx	##7_000_000
-	drvh	#56
-	waitx	##7_000_000
 
-	' and clear the response
-	mov	params+0, #0
+	tjz	size, #done_write	' skip everything if no data to write
+	
+	and	ouraddr, ##$00FF_FFFF	' erase high bits of address
+	and	hubaddr, ##$00FF_FFFF	' erase high bits of address
+
+	' walk through writing pages
+.page_loop
+	test	ouraddr, ##$FFF wz	' check for 4K boundary
+  if_z	call	#Erase	 		' if on boundary, erase this page
+  	' now write a page of 256 bytes
+	call	#WritePage
+	sub	size, #256 wcz
+  if_a	jmp	#.page_loop
+
+done_write
+
+	' send NULL for error pointer (means OK)
+	mov	params, #0
+
 send_response
 	wrlong	params, ptra
 	
@@ -107,7 +158,132 @@ bad_address
 	
 	jmp	#send_response
 
+''
+'' medium level SPI routines
+''
+
+'' erase a 4K page of data at ouraddr
+Erase
+	call	#Spi_Init
+	mov	cmd, #Write_Enable
+	call	#Spi_Cmd8
+	mov	cmd, #Erase_4k
+	mov	adr, ouraddr
+	call	#Spi_Cmd32
+	jmp	#Spi_Wait
+
+'' write a page of 256 bytes from hubaddr to ouraddr
+WritePage
+{	add	hubaddr, #256
+	add	ouraddr, #256
+	ret
+}
+	call	#Spi_Init
+	mov	cmd, #Write_Enable
+	call	#Spi_Cmd8
+	mov	cmd, #Write_Page
+	mov	adr, ouraddr
+	add	ouraddr, #256
+	call	#Spi_Cmd32
+	mov	rep1, #64
+.wp_loop
+	rdlong	data, hubaddr
+	add	hubaddr, #4
+	call	#Spi_Wr4Bytes
+	djnz	rep1, #.wp_loop
+	jmp	#Spi_Wait
+''
+'' low level SPI routines
+''
+
+'' initialize SPI for flash
+Spi_Init
+                drvh    #spi_cs
+                fltl    #spi_ck                        ' reset smart pins
+                fltl    #spi_di
+                fltl    #spi_do
+                wrpin   ##modeClk,#spi_ck              ' smart pin transition mode
+                wrpin   ##modeTXD,#spi_di              ' smart pin synchronous serial transmit
+                wrpin   ##modeRXD,#spi_do              ' smart pin synchronous serial receive
+                wxpin   #2,#spi_ck                     ' clock transition base period (sysclock/4)
+                dirh    #spi_ck                        ' enable smart pin
+		ret
+
+'' outputs 8 bits command, MSB first
+'' command is in "cmd" register
+SPI_Cmd8
+                outh    #spi_cs
+                waitx   #6                             ' 12+6 = 18 ticks (50 ns minimum CS deselect for write commands)
+                shl     cmd,#24                        ' shift command up
+                rev     cmd
+                wxpin   #7, #spi_di                    ' 8 bits, continuous mode
+                wypin   cmd,#spi_di
+                outl    #spi_cs
+                wypin   #16,#spi_ck                    ' start CLK sequence (16 transitions = 8 pulses)
+                dirh    #spi_di                        ' enable TX smart pin
+.waitRdy        testp   #spi_ck wz                     ' IN=1 if clocking finished
+        if_nz   jmp     #.waitRdy                      ' wait until last CLK sequence finished
+                dirl    #spi_di
+		ret
+
+		' outputs 4 bytes: 8 bit command + 24 bits adr
+Spi_Cmd32
+                outh    #spi_cs
+                waitx   #4                             ' 14+4 = 18 ticks (50 ns minimum CS deselect for write commands)
+                shl     cmd,#24                        'shift command up
+                or      cmd,adr                        'or in address
+                rev     cmd
+                wxpin   #31, #spi_di                   ' 32 bits, continuous mode
+                wypin   cmd,#spi_di
+                outl    #spi_cs
+                wypin   #64,#spi_ck                    ' start CLK sequence (64 transitions = 32 pulses)
+                dirh    #spi_di                        ' enable TX smart pin
+.waitRdy        testp   #spi_ck wz                     ' IN=1 if clocking finished
+        if_nz   jmp     #.waitRdy                      ' wait until last CLK sequence finished
+                dirl    #spi_di
+		ret
+
+'' write 4 bytes of data LSB first (little endian)
+Spi_Wr4Bytes
+                movbyts data,#%00_01_10_11
+                rev     data
+                wxpin   #31, #spi_di                   ' 32 bits, continuous mode
+                wypin   data,#spi_di
+                wypin   #64,#spi_ck                    ' start CLK sequence (64 transitions = 32 pulses)
+                dirh    #spi_di                        ' enable TX smart pin
+.waitRdy        testp   #spi_ck wz                     ' IN=1 if clocking finished
+        if_nz   jmp     #.waitRdy                      ' wait until last CLK sequence finished
+                dirl    #spi_di
+		ret
+
+'' read 8 bits into data
+Spi_RdByte
+                wxpin   #7 | 1<<5, #spi_do             ' 8 bits, with hold time (post-clock sampling)
+                wypin   #16,#spi_ck                    ' start 16 clock transitions
+                dirh    #spi_do                        ' enable RX smart pin
+.waitDone       testp   #spi_do   wz                   ' IN=1 if byte received
+        if_nz   jmp     #.waitDone                     ' wait until byte received
+                rdpin   data,#spi_do
+                rev     data
+                zerox   data,#7                        ' limit to 8 bits
+                dirl    #spi_do
+		ret
+		
+Spi_Wait
+		mov	cmd, #Read_Status
+		call	#Spi_Cmd8
+		call	#Spi_RdByte
+		test	data, #$1 wz
+	if_nz	jmp	#Spi_Wait
+		drvh	#spi_cs
+		ret
+
 	' and our variables
+cmd	res	1
+adr	res	1
+data	res	1
+rep1	res	1
+
 params
 hubaddr
 	res	1
