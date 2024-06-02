@@ -367,7 +367,11 @@ downloadData(uint8_t *data, uint32_t address, uint32_t size)
     unsigned chksum = 0;
     int sent = 0;
     int mode;
-    
+
+    if (size == 0) {
+        if (verbose) printf("Skipping 0 size download at address 0x%08x\n", address);
+        return 0;
+    }
     // send header to device
     mode = sendAddressSize(address, size);
     if (mode == 'h') {
