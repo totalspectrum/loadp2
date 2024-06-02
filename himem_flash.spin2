@@ -174,10 +174,6 @@ Erase
 
 '' write a page of 256 bytes from hubaddr to ouraddr
 WritePage
-{	add	hubaddr, #256
-	add	ouraddr, #256
-	ret
-}
 	call	#Spi_Init
 	mov	cmd, #Write_Enable
 	call	#Spi_Cmd8
