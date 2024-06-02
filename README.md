@@ -33,6 +33,8 @@ usage: loadp2
          [ -ZERO ]                 clear memory before download
          [ -NOZERO ]               do not clear memory before download (default)
          [ -SINGLE ]               set load mode for single stage
+	 [ -FLASH ]		   load program into SPI flash
+	 [ -HIMEM=flash ]	   load code sections above $8000_0000 into flash
 	 [ -e script ]             execute script after loading
 	 [ -a ] or [ --args ]      remaining arguments are passed to loaded program at $FC000
 ```
@@ -52,6 +54,14 @@ loaded with a filespec of:
     @0=vgacode.bin,@1000=picture.bmp
 ```
 The main executable code must always be specified first
+
+If the `-HIMEM=flash` flag is given, then addresses with the high bit set are
+interpreted as flash memory and written to flash. For example,
+`@0=vgacode.bin,@80010000=picture.bmp` would write `picture.bmp` to flash at
+offset `0x10000` (64K) before executing `vgacode.bin`. Note that simply
+writing a program to offset `0` in flash may not make it bootable, as the
+boot ROM has specific requirements to boot from flash. Use the `-FLASH` flag
+instead to create a bootable flash program.
 
 ## Scripts
 
