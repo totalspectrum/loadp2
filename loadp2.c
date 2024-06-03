@@ -487,6 +487,9 @@ loadElfSections(const char *fname)
         if (program.type != PT_LOAD) {
             continue;
         }
+        if (program.filesz == 0) {
+            continue;
+        }
         if (verbose) printf("load %d bytes at 0x%x\n", program.filesz, program.paddr);
         fseek(f, program.offset, SEEK_SET);
         if (need_continue) {
@@ -778,7 +781,6 @@ int loadfile(char *fname, int address)
     unsigned chksum;
     char *next_fname = NULL;
     int send_size = 0;
-    int mode;
     
     if (load_mode == LOAD_SINGLE || load_mode == LOAD_SPI) {
         if (address != 0) {
@@ -847,18 +849,12 @@ int loadfile(char *fname, int address)
 
     // if a himem helper is present, download it to $FC000 and run it
     if (himem_bin) {
-        mode = sendAddressSize(0xFC000, himem_size);
-        if (mode == 's') {
-            chksum = 0;
-            tx(himem_bin, himem_size);
-            for (unsigned i = 0; i < himem_size; i++) {
-                chksum += himem_bin[i];
-            }
-            verify_chksum(chksum);
-            tx_raw_byte('!'); // tell device to execute this plugin
-        } else {
-            printf("Unexpected response while downloading himem helper; ignoring\n");
+        int size = downloadData(himem_bin, 0xFC000, himem_size);
+        if (size != himem_size) {
+            printf("Unable to download himem helper\n");
+            promptexit(1);
         }
+        tx_raw_byte('!'); // tell device to execute this plugin
     }
     // we want to be able to insert 0 characters in fname
     // in order to break up multiple file names into different strings
