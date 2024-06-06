@@ -135,7 +135,14 @@ send_response
 	
 	jmp	#mainloop
 endit
-	drvh	#56
+	' shut down the smart pins
+	wrpin	#0, #spi_ck
+	wrpin	#0, #spi_di
+	wrpin	#0, #spi_do
+	dirl	#spi_ck
+	dirl	#spi_di
+	dirl	#spi_do
+
 	cogid	pb
 	cogstop	pb
 
