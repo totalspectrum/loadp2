@@ -48,9 +48,8 @@
 #define ENTER_DEBUG 2
 
 #define LOAD_CHIP   0
-#define LOAD_FPGA   1
-#define LOAD_SINGLE 2
-#define LOAD_SPI    3
+#define LOAD_SINGLE 1
+#define LOAD_SPI    2
 
 #define ROUND_UP(x) (((x)+3) & ~3)
 
@@ -83,7 +82,6 @@ static void RunScript(char *script);
   #include <dirent.h>
 #endif
 
-#include "MainLoader_fpga.h"
 #include "MainLoader_chip.h"
 #include "flash_loader.h"
 #include "himem_flash.h"
@@ -100,6 +98,7 @@ static int fifo_size = DEFAULT_FIFO_SIZE;
 
 static uint8_t *himem_bin;
 static uint32_t himem_size;
+static bool himem_is_flash; /* for translating -FLASH */
 
 int ignoreEof = 0;
 
@@ -161,14 +160,11 @@ usage: loadp2\n\
          [ -xDEBUG ]               enter ROM debug monitor\n\
          [ -xTAQOZ ]               enter ROM version of TAQOZ\n\
          [ -xTERM ]                enter terminal, avoid reset\n\
-         [ -CHIP ]                 set load mode for CHIP\n\
-         [ -FPGA ]                 set load mode for FPGA\n\
          [ -NOZERO ]               do not clear memory before download (default)\n\
          [ -ZERO ]                 clear memory before download\n\
          [ -PATCH ]                patch in clock frequency and serial parms\n\
          [ -SINGLE ]               set load mode for single stage\n\
-         [ -FLASH ]                like -SINGLE, but copies application to SPI flash\n\
-         [ -SPI ]                  alias for -FLASH\n\
+         [ -FLASH ]                program application to SPI flash\n\
          [ -NOEOF ]                ignore EOF on input\n\
          [ -HIMEM=flash ]          addresses 0x8000000 and up refer to flash\n\
          filespec                  file to load\n\
@@ -251,7 +247,7 @@ int g_fileptr;
  * to the file (if prepend_data is non-NULL)
  */
 static int
-readElfFile(FILE *infile, ElfHdr *hdr, uint8_t *prepend_data, int prepend_size)
+readElfFileToMem(FILE *infile, ElfHdr *hdr, uint8_t *prepend_data, int prepend_size)
 {
     ElfContext *c;
     ElfProgramHdr program;
@@ -531,7 +527,7 @@ readBinaryFile(char *fname, uint8_t *prepend_data, int prepend_size)
     }
     if (ReadAndCheckElfHdr(infile, &hdr)) {
         /* this is an ELF file, load using ReadElf instead */
-        return readElfFile(infile, &hdr, prepend_data, prepend_size);
+        return readElfFileToMem(infile, &hdr, prepend_data, prepend_size);
     } else {
         //printf("not an ELF file\n");
     }
@@ -679,49 +675,6 @@ static unsigned flag_bits()
     return force_zero | (patch_mode << 1);
 }
 
-int loadfileFPGA(char *fname, int address)
-{
-    int num, size;
-    int patch = patch_mode;
-
-    size = readBinaryFile(fname, NULL, 0);
-    if (size < 0)
-    {
-        printf("Could not open %s\n", fname);
-        return 1;
-    }
-    if (verbose) {
-        printf("Loading fast loader for %s...\n", (load_mode == LOAD_FPGA) ? "fpga" : "chip");
-    }
-    tx((uint8_t *)"> Prop_Hex 0 0 0 0", 18);
-    txstring((uint8_t *)MainLoader_fpga_bin, MainLoader_fpga_bin_len);
-    // OLD FPGA loader
-    txval(clock_mode);
-    txval((3*clock_freq+loader_baud)/(loader_baud*2)-extra_cycles);
-    txval((clock_freq+loader_baud/2)/loader_baud-extra_cycles);
-    txval(size);
-    txval(address);
-    txval(flag_bits());
-    tx((uint8_t *)"~", 1);
-    msleep(200);
-    if (verbose) printf("Loading %s - %d bytes\n", fname, size);
-    while ((num=loadBytesFromGBuf(buffer, 1024)))
-    {
-        if (patch)
-        {
-            patch = 0;
-            memcpy(&buffer[0x14], &clock_freq, 4);
-            memcpy(&buffer[0x18], &clock_mode, 4);
-            memcpy(&buffer[0x1c], &user_baud, 4);
-        }
-        tx((uint8_t *)buffer, num);
-    }
-    wait_drain();
-    msleep(100);
-    if (verbose) printf("%s loaded\n", fname);
-    return 0;
-}
-
 static char *getNextFile(char *fname, char **next_p, int *address_p)
 {
     int address = *address_p;
@@ -793,16 +746,9 @@ int loadfile(char *fname, int address)
         }
         return loadfilesingle(fname);
     }
-    if (load_mode == LOAD_FPGA) {
-        if (mem_argv_bytes != 0) {
-            printf("ERROR: ARGv is not compatible with LOAD_FPGAn");
-            promptexit(1);
-        }
-        return loadfileFPGA(fname, address);
-    }
-    
+
     if (verbose) {
-        printf("Loading fast loader for %s...\n", (load_mode == LOAD_FPGA) ? "fpga" : "chip");
+        printf("Loading fast loader...\n");
     }
     tx((uint8_t *)"> Prop_Hex 0 0 0 0", 18);
     txstring((uint8_t *)MainLoader_chip_bin, MainLoader_chip_bin_len);
@@ -982,8 +928,8 @@ checkp2_and_init(char *Port, int baudrate, int retries)
             {
                 if (buffer[11] == 'B')
                 {
-                    load_mode = LOAD_FPGA;
-                    if (verbose) printf("Setting load mode to FPGA\n");
+                    printf("ERROR: Detected FPGA, but this version of loadp2 does not support FPGA!\n");
+                    promptexit(1);
                 }
                 else if (buffer[11] == 'A' || buffer[11] == 'G')
                 {
@@ -1250,8 +1196,6 @@ int main(int argc, char **argv)
                 patch_mode = 1;
             else if (!strcmp(argv[i], "-CHIP"))
                 load_mode = LOAD_CHIP;
-            else if (!strcmp(argv[i], "-FPGA"))
-                load_mode = LOAD_FPGA;
             else if (!strcmp(argv[i], "-SINGLE"))
                 load_mode = LOAD_SINGLE;
             else if (!strcmp(argv[i], "-SPI") || !strcmp(argv[i], "-FLASH") ) {
@@ -1262,6 +1206,7 @@ int main(int argc, char **argv)
                 if (!strcmp(himem_kind, "flash")) {
                     himem_bin = (uint8_t *)himem_flash_bin;
                     himem_size = himem_flash_bin_len;
+                    himem_is_flash = true;
                 } else {
                     printf("Unknown HIMEM memory type %s\n", himem_kind);
                     Usage(NULL);
@@ -1375,16 +1320,6 @@ int main(int argc, char **argv)
             {
                 clock_mode = get_clock_mode(clock_freq);
                 if (verbose) printf("Setting clock_mode to %x\n", clock_mode);
-            }
-        }
-        else if (load_mode == LOAD_FPGA)
-        {
-            int temp = clock_freq / 312500; // * 256 / 80000000
-            int temp1 = temp - 1;
-            if (clock_mode == -1)
-            {
-                clock_mode = temp1;
-                if (verbose) printf("Setting clock_mode to %x\n", temp1);
             }
         }
         else if (load_mode == -1)
