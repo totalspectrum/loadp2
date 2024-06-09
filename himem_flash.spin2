@@ -175,7 +175,9 @@ bad_address
 pad_page
 	mov	padsize, size
 	subr	padsize, #256  ' padsize = 256 - padsize
-	mov	ptrb, hubaddr
+	mov	ptrb, size
+	and	ptrb, #$ff
+	add	ptrb, hubaddr
 	rep	@.loopend, padsize
 	wrbyte	#$FF, ptrb++
 .loopend
