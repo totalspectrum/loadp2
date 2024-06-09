@@ -368,6 +368,12 @@ downloadData(uint8_t *data, uint32_t address, uint32_t size)
         if (verbose) printf("Skipping 0 size download at address 0x%08x\n", address);
         return 0;
     }
+    if (address == 0 && patch_mode && size >= 0x40) {
+        memcpy(data+0x14, &clock_freq, 4);  /* assumes little-endian host! */
+        memcpy(data+0x18, &clock_mode, 4);
+        memcpy(data+0x1c, &user_baud, 4);
+        patch_mode = 0;
+    }
     // send header to device
     mode = sendAddressSize(address, size);
     if (mode == 'h') {
@@ -730,7 +736,6 @@ static int verify_chksum(unsigned chksum)
 int loadfile(char *fname, int address)
 {
     int num, size;
-    int patch = patch_mode;
     unsigned chksum;
     char *next_fname = NULL;
     int send_size = 0;
@@ -841,16 +846,19 @@ int loadfile(char *fname, int address)
             return 1;
         }
 
+#if 0        
         /* patch the file data if necessary */
-        if (patch) {
+        /* now happens in downloadData */
+        if (patch_mode) {
             uint8_t *buffer = (send_size) ? g_filedata+4 : g_filedata;
-            patch = 0;
+            patch_mode = 0;
             if (g_filesize >= 0x24) {
                 memcpy(&buffer[0x14], &clock_freq, 4);
                 memcpy(&buffer[0x18], &clock_mode, 4);
                 memcpy(&buffer[0x1c], &user_baud, 4);
             }
         }
+#endif        
         /* now send the file data from g_filedata */
         if (verbose) printf("Loading %s - %d bytes\n", next_fname, size);
         num = downloadData(g_filedata, address, g_filesize);
