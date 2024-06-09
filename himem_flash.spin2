@@ -121,6 +121,10 @@ process_request
 	test	ouraddr, ##$FFF wz	' check for 4K boundary
   if_z	call	#Erase	 		' if on boundary, erase this page
   	' now write a page of 256 bytes
+	' pad page with $FF if necessary
+	cmp   	size, #256 wcz
+  if_b	call	#pad_page
+  
 	call	#WritePage
 	sub	size, #256 wcz
   if_a	jmp	#.page_loop
@@ -164,6 +168,18 @@ bad_address
 	djnz	pb, #.addr
 	
 	jmp	#send_response
+
+''
+'' pad a page of data with $FF
+''
+pad_page
+	mov	padsize, size
+	subr	padsize, #256  ' padsize = 256 - padsize
+	mov	ptrb, hubaddr
+	rep	@.loopend, padsize
+	wrbyte	#$FF, ptrb++
+.loopend
+	ret
 
 ''
 '' medium level SPI routines
@@ -286,6 +302,7 @@ cmd	res	1
 adr	res	1
 data	res	1
 rep1	res	1
+padsize res	1
 
 params
 hubaddr
