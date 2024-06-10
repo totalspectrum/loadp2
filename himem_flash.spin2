@@ -140,9 +140,10 @@ send_response
 	jmp	#mainloop
 endit
 	' shut down the smart pins
-	dirl	#spi_ck
-	dirl	#spi_di
-	dirl	#spi_do
+	fltl    #spi_cs
+        fltl    #spi_ck                        ' reset smart pins
+        fltl    #spi_di
+        fltl    #spi_do
 	wrpin	#0, #spi_ck
 	wrpin	#0, #spi_di
 	wrpin	#0, #spi_do

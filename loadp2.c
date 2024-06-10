@@ -49,7 +49,6 @@
 
 #define LOAD_CHIP   0
 #define LOAD_SINGLE 1
-#define LOAD_SPI    2
 
 #define ROUND_UP(x) (((x)+3) & ~3)
 
@@ -66,6 +65,7 @@ static int enter_rom = NO_ENTER;
 static char *send_script = NULL;
 static int mem_argv_bytes = 0;
 static char *mem_argv_data = NULL;
+static bool load_to_flash = false;
 
 int get_loader_baud(int ubaud, int lbaud);
 static void RunScript(char *script);
@@ -85,6 +85,7 @@ static void RunScript(char *script);
 #include "MainLoader_chip.h"
 #include "flash_loader.h"
 #include "himem_flash.h"
+#include "flash_stub.h"
 
 static int32_t ibuf[256];
 static int32_t ibin[32];
@@ -368,7 +369,7 @@ downloadData(uint8_t *data, uint32_t address, uint32_t size)
         if (verbose) printf("Skipping 0 size download at address 0x%08x\n", address);
         return 0;
     }
-    if (address == 0 && patch_mode && size >= 0x40) {
+    if ( (address == 0 || (load_to_flash && address == 0x80000400)) && patch_mode && size >= 0x40) {
         memcpy(data+0x14, &clock_freq, 4);  /* assumes little-endian host! */
         memcpy(data+0x18, &clock_mode, 4);
         memcpy(data+0x1c, &user_baud, 4);
@@ -384,11 +385,16 @@ downloadData(uint8_t *data, uint32_t address, uint32_t size)
         printf("Device reported unknown mode '%c'\n", mode);
         return -1;
     }
+    if (verbose && mode == 'k') {
+        printf("Sending blocks: "); fflush(stdout);
+    }
     chksum = 0;
     while (size > 0) {
         num = (size > 1024) ? 1024 : size;
         if (!num) break;
-        if (verbose && mode == 'k') printf("Sending block of %d bytes\n", num);
+        if (verbose && mode == 'k') {
+            printf("."); fflush(stdout);
+        }
         tx(data, num);
         for (i = 0; i < num; i++) {
             chksum += *data++;
@@ -431,33 +437,38 @@ downloadData(uint8_t *data, uint32_t address, uint32_t size)
 // send a block of 'size' bytes from a file and send to device at address
 // 'address'
 //
-int
-loadBytesFromFileAtOffset(FILE *infile, uint32_t address, uint32_t size)
+uint8_t *
+loadBytesFromFileAtOffset(FILE *infile, uint32_t offset, uint32_t size)
 {
     uint8_t *localBuf;
     int num;
+    int r;
     
-    // get memory
-    localBuf = calloc(1, size);
+    r = fseek(infile, offset, SEEK_SET);
+    if (r != 0) {
+        printf("Error seeking in file\n");
+        return NULL;
+    }
+    // get memory; round up to next longword
+    localBuf = calloc(1, (size+3)&~3);
     if (!localBuf) {
         printf("Unable to allocate %u bytes\n", size);
-        return -1;
+        return NULL;
     }
     num = fread(localBuf, 1, size, infile);
     if (num != (int)size) {
         printf("Error reading data: expected %u bytes, got %d\n", size, num);
-        return -1;
+        return NULL;
     }
-    num = downloadData(localBuf, address, size);
-    free(localBuf);
-
-    return num;
+    return localBuf;
 }
 
 //
 // try loading the individual sections of an ELF file
-// returns true if it was an ELF, even if we had trouble with it
+// returns the number of bytes loaded, or -1 if there was an error
 //
+#define BOOT_MAGIC 0x706F7250 /* little endian "Prop" */
+
 static int
 loadElfSections(const char *fname)
 {
@@ -467,6 +478,9 @@ loadElfSections(const char *fname)
     int i, size;
     FILE *f = fopen(fname, "rb");
     bool need_continue = false;
+    bool do_flash = load_to_flash;
+    uint8_t *bootloader = NULL;
+    uint32_t ram_offset = 0;
     
     if (!f) return -1;
     if (!ReadAndCheckElfHdr(f, &hdr)) {
@@ -477,11 +491,89 @@ loadElfSections(const char *fname)
     c = OpenElfFile(f, &hdr);
     if (!c) {
         fclose(f);
-        return false;
+        return -1;
     }
+    /* If we are flashing the program for later execution, we need to prepend a
+       stub loader: calculate the program's size and a checksum
+       Note that if there are multiple segments to go in HUB memory then we
+       need to bail on actually calculating a checksum, and use the upper
+       bound of all the segments for the load size.
+    */
+    if (do_flash) {
+        uint32_t load_upper_bound = 0;
+        uint32_t load_chksum = 0;
+        uint8_t *data;
+        uint32_t *ptr32;
+        
+        int hub_sections = 0;
+        for (i = 0; i < c->hdr.phnum; i++) {
+            if (!LoadProgramTableEntry(c, i, &program)) {
+                printf("Error reading ELF program header %d\n", i);
+                fclose(f);
+                return -1;
+            }
+            if (program.type != PT_LOAD) continue;
+            if (program.filesz == 0) continue;
+            if (program.paddr > 0x0007ffff) { /* does not fit in P2 512K RAM */
+                continue;  /* do not need to take it into account for initial stub */
+            }
+            hub_sections++;
+            if (program.paddr + program.filesz > load_upper_bound) {
+                load_upper_bound = program.paddr + program.filesz;
+            }
+            /* update the checksum */
+            data = loadBytesFromFileAtOffset(f, program.offset, program.filesz);
+            if (!data) {
+                fclose(f);
+                return -1;
+            }
+            /* do checksum calc here */
+            ptr32 = (uint32_t *)data;
+            for (int num_longs = (program.filesz + 3)/4; num_longs > 0; --num_longs) {
+                load_chksum += *ptr32++;
+            }
+            free(data);
+        }
+        if (hub_sections > 1) {
+            printf("Warning: ELF file has multiple (%d) segments to load into RAM, which requires disabling checksym protection\n", hub_sections);
+            load_chksum = 0;
+        }
+
+        /* now fix up the flash bootloader ("stub") so that it knows how
+           much to load and its checksum */
+        bootloader = calloc(1, 1024);
+        if (flash_stub_bin_len > 1024) {
+            printf("Internal error, flash stub is too big to fit\n");
+            return -1;
+        }
+        memcpy(bootloader, flash_stub_bin, flash_stub_bin_len);
+        ptr32 = (uint32_t *)bootloader;
+        ptr32[2] = load_chksum;
+        ptr32[3] = load_upper_bound;
+
+        /* now calculate the checksum of the bootloader itself */
+        uint32_t boot_sum = 0;
+        for (int n = 0; n < 1024/4; n++) {
+            boot_sum += ptr32[n];
+        }
+        /* adjust so it will become the magic value "Prop" */
+        ptr32[1] = BOOT_MAGIC - boot_sum;
+
+        /* load boot stub so that we will run it later */
+        downloadData(bootloader, 0, 1024);
+        tx_raw_byte('+');
+        
+        /* now put a copy in flash (at 0x80000000) */
+        downloadData(bootloader, 0x80000000, 1024);
+        ram_offset = 0x80000400;
+        need_continue = true;
+    }
+    
+    /* walk through the program table again, this time loading to the device */
     size = 0;
-    /* walk through the program table */
     for (i = 0; i < c->hdr.phnum; i++) {
+        uint32_t addr;
+        uint8_t *data;
         if (!LoadProgramTableEntry(c, i, &program)) {
             printf("Error reading ELF program header %d\n", i);
             continue;
@@ -493,11 +585,20 @@ loadElfSections(const char *fname)
             continue;
         }
         if (verbose) printf("load %d bytes at 0x%x\n", program.filesz, program.paddr);
-        fseek(f, program.offset, SEEK_SET);
         if (need_continue) {
             tx_raw_byte('+');
         }
-        size += loadBytesFromFileAtOffset(f, program.paddr, program.filesz);
+        data = loadBytesFromFileAtOffset(f, program.offset, program.filesz);
+        if (!data) {
+            printf("Error loading program header %d\n", i);
+            fclose(f);
+            return -1;
+        }
+        addr = program.paddr;
+        if (addr < 0x800000)
+            addr += ram_offset;
+        size += downloadData(data, addr, program.filesz);
+        free(data);
         need_continue = true;
     }
     // done sending data
@@ -606,7 +707,7 @@ int loadfilesingle(char *fname)
     int patch = patch_mode;
     int checksum = 0;
 
-    if (load_mode == LOAD_SPI) {
+    if (load_to_flash) {
         size = readBinaryFile(fname, (uint8_t *)flash_loader_bin, flash_loader_bin_len);
         // need to patch up the binary
         if (size > 0) {
@@ -740,7 +841,7 @@ int loadfile(char *fname, int address)
     char *next_fname = NULL;
     int send_size = 0;
     
-    if (load_mode == LOAD_SINGLE || load_mode == LOAD_SPI) {
+    if (load_mode == LOAD_SINGLE) {
         if (address != 0) {
             printf("ERROR: -SINGLE and -FLASH can only load at address 0\n");
             promptexit(1);
@@ -807,7 +908,7 @@ int loadfile(char *fname, int address)
         }
         tx_raw_byte('!'); // tell device to execute this plugin
     }
-    // we want to be able to insert 0 characters in fname
+    // we want to be able to insert '\0' characters in fname
     // in order to break up multiple file names into different strings
     // so we have to copy it to a duplicate buffer
     fname = duplicate_string(fname);
@@ -1207,7 +1308,7 @@ int main(int argc, char **argv)
             else if (!strcmp(argv[i], "-SINGLE"))
                 load_mode = LOAD_SINGLE;
             else if (!strcmp(argv[i], "-SPI") || !strcmp(argv[i], "-FLASH") ) {
-                load_mode = LOAD_SPI;
+                load_to_flash = true;
                 use_checksum = 0; /* checksum calculation throws off flash loader */
             } else if (!strncmp(argv[i], "-HIMEM=", 7)) {
                 char *himem_kind = argv[i] + 7;
