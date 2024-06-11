@@ -40,20 +40,9 @@ DAT
 loader
 x		jmp	#real_start	' re-used as temporary variable
 propchksum	long	0		' magic value to make first 1K add to "Prop" (filled by loadp2)
-app_sum		long	0		' application checksum (filled by loadp2)
 app_longs	long	0		' number of longs (filled by loadp2)
-app_longs2	long	0		' copy of app_longs (filled by us)
 
 real_start
-		mov	app_longs2, app_longs	'save program size
-'{ FIXME DEBUG
-		mov	app_sum, #0
-		drvl	#56
-		waitx	##40_000_000
-		drvl	#57
-		waitx	##40_000_000
-		drvh	#56
-'}
 '
 '
 ' Read in remaining application longs
@@ -82,32 +71,22 @@ real_start
 
 		tjnz	app_longs,#.block	'if more longs left, read another block
 
-		wrpin	#0,#spi_ck		'clear spi_ck smart pin mode
-'
-'
-' Verify application checksum
-' (skip if app_sum is 0)
-'
-		tjz	app_sum, #go
-		neg	app_sum
-		
-		rdfast	#0,#0			'sum all application longs
-		rep	#2,app_longs2
-		rflong	x
-		add	app_sum,x	wz	'z=1 if verified
 
-stop
 		' shut down smart pins to leave them
 		' in known state for app
 		fltl	#spi_do addpins 3	'float all pins
-		wrpin	#0, #spi_cs
-		wrpin	#0, #spi_ck
-		wrpin	#0, #spi_do
-		wrpin	#0, #spi_di
-	if_nz	hubset	#%0010			'if checksum failed, stop clock until next reset
+		wrpin	#0,#spi_ck		'clear spi_ck smart pin mode
 
-go
-		coginit	#0,#$00000		'checksum verified, run application
+{ FIXME DEBUG
+		drvl	#56
+		waitx	##40_000_000
+		drvl	#57
+		waitx	##40_000_000
+		drvh	#56
+		waitx	##40_000_000
+}
+		waitx	##2_000_000		'pause a bit
+		coginit	#0,#$00000		'run application
 '
 '
 ' Data

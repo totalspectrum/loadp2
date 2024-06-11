@@ -103,6 +103,10 @@ mainloop
 	rdlong	params, ptra
 	tjz	hubaddr, #mainloop
 
+	' special case, address 1 means 0
+	cmp	hubaddr, #1 wz
+  if_z	mov	hubaddr, #0
+ 
 	' check initial address
 	' process the request
 process_request

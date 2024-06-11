@@ -332,12 +332,13 @@ static int verify_chksum(unsigned chksum); // forward declaration
 // 'w' : wait for a while (device is busy e.g. erasing flash)
 // 'e' : error
 //
-int
+static int
 sendAddressSize(uint32_t address, uint32_t size)
 {
     uint8_t resp[4];
     int r;
     if (verbose) printf("address=0x%08x size=%x\n", address, size);
+    tx_raw_byte('=');
     tx_raw_long(address);
     tx_raw_long(size);
     do {
@@ -353,11 +354,14 @@ sendAddressSize(uint32_t address, uint32_t size)
     return r;
 }
 
+// keeps track of HUB memory limit, for use when flashing
+static uint32_t g_highest_hub_addr = 0;
+
 //
 // download a block of data to the device at address 'address'
 // returns bytes sent to device
 //
-int
+static int
 downloadData(uint8_t *data, uint32_t address, uint32_t size)
 {
     int num, i;
@@ -369,11 +373,17 @@ downloadData(uint8_t *data, uint32_t address, uint32_t size)
         if (verbose) printf("Skipping 0 size download at address 0x%08x\n", address);
         return 0;
     }
-    if ( (address == 0 || (load_to_flash && address == 0x80000400)) && patch_mode && size >= 0x40) {
+    if ( address == 0 && patch_mode && size >= 0x40) {
         memcpy(data+0x14, &clock_freq, 4);  /* assumes little-endian host! */
         memcpy(data+0x18, &clock_mode, 4);
         memcpy(data+0x1c, &user_baud, 4);
         patch_mode = 0;
+    }
+    // update hub memory limit
+    if (address <= 0x7ffff) {
+        uint32_t endaddr = address + size;
+        if (g_highest_hub_addr < endaddr)
+            g_highest_hub_addr = endaddr;
     }
     // send header to device
     mode = sendAddressSize(address, size);
@@ -477,9 +487,6 @@ loadElfSections(const char *fname)
     ElfProgramHdr program;
     int i, size;
     FILE *f = fopen(fname, "rb");
-    bool need_continue = false;
-    bool do_flash = load_to_flash;
-    uint8_t *bootloader = NULL;
     uint32_t ram_offset = 0;
     
     if (!f) return -1;
@@ -493,83 +500,7 @@ loadElfSections(const char *fname)
         fclose(f);
         return -1;
     }
-    /* If we are flashing the program for later execution, we need to prepend a
-       stub loader: calculate the program's size and a checksum
-       Note that if there are multiple segments to go in HUB memory then we
-       need to bail on actually calculating a checksum, and use the upper
-       bound of all the segments for the load size.
-    */
-    if (do_flash) {
-        uint32_t load_upper_bound = 0;
-        uint32_t load_chksum = 0;
-        uint8_t *data;
-        uint32_t *ptr32;
-        
-        int hub_sections = 0;
-        for (i = 0; i < c->hdr.phnum; i++) {
-            if (!LoadProgramTableEntry(c, i, &program)) {
-                printf("Error reading ELF program header %d\n", i);
-                fclose(f);
-                return -1;
-            }
-            if (program.type != PT_LOAD) continue;
-            if (program.filesz == 0) continue;
-            if (program.paddr > 0x0007ffff) { /* does not fit in P2 512K RAM */
-                continue;  /* do not need to take it into account for initial stub */
-            }
-            hub_sections++;
-            if (program.paddr + program.filesz > load_upper_bound) {
-                load_upper_bound = program.paddr + program.filesz;
-            }
-            /* update the checksum */
-            data = loadBytesFromFileAtOffset(f, program.offset, program.filesz);
-            if (!data) {
-                fclose(f);
-                return -1;
-            }
-            /* do checksum calc here */
-            ptr32 = (uint32_t *)data;
-            for (int num_longs = (program.filesz + 3)/4; num_longs > 0; --num_longs) {
-                load_chksum += *ptr32++;
-            }
-            free(data);
-        }
-        if (hub_sections > 1) {
-            printf("Warning: ELF file has multiple (%d) segments to load into RAM, which requires disabling checksym protection\n", hub_sections);
-            load_chksum = 0;
-        }
-
-        /* now fix up the flash bootloader ("stub") so that it knows how
-           much to load and its checksum */
-        bootloader = calloc(1, 1024);
-        if (flash_stub_bin_len > 1024) {
-            printf("Internal error, flash stub is too big to fit\n");
-            return -1;
-        }
-        memcpy(bootloader, flash_stub_bin, flash_stub_bin_len);
-        ptr32 = (uint32_t *)bootloader;
-        ptr32[2] = load_chksum;
-        ptr32[3] = load_upper_bound;
-
-        /* now calculate the checksum of the bootloader itself */
-        uint32_t boot_sum = 0;
-        for (int n = 0; n < 1024/4; n++) {
-            boot_sum += ptr32[n];
-        }
-        /* adjust so it will become the magic value "Prop" */
-        ptr32[1] = BOOT_MAGIC - boot_sum;
-
-        /* load boot stub so that we will run it later */
-        downloadData(bootloader, 0, 1024);
-        tx_raw_byte('+');
-        
-        /* now put a copy in flash (at 0x80000000) */
-        downloadData(bootloader, 0x80000000, 1024);
-        ram_offset = 0x80000400;
-        need_continue = true;
-    }
-    
-    /* walk through the program table again, this time loading to the device */
+    /* walk through the program table, loading to the device */
     size = 0;
     for (i = 0; i < c->hdr.phnum; i++) {
         uint32_t addr;
@@ -585,9 +516,6 @@ loadElfSections(const char *fname)
             continue;
         }
         if (verbose) printf("load %d bytes at 0x%x\n", program.filesz, program.paddr);
-        if (need_continue) {
-            tx_raw_byte('+');
-        }
         data = loadBytesFromFileAtOffset(f, program.offset, program.filesz);
         if (!data) {
             printf("Error loading program header %d\n", i);
@@ -599,10 +527,7 @@ loadElfSections(const char *fname)
             addr += ram_offset;
         size += downloadData(data, addr, program.filesz);
         free(data);
-        need_continue = true;
     }
-    // done sending data
-    //tx_raw_byte('-'); done by caller so they can handle ARGV
     fclose(f);
     return size;
 }
@@ -837,10 +762,9 @@ static int verify_chksum(unsigned chksum)
 int loadfile(char *fname, int address)
 {
     int num, size;
-    unsigned chksum;
     char *next_fname = NULL;
     int send_size = 0;
-    
+
     if (load_mode == LOAD_SINGLE) {
         if (address != 0) {
             printf("ERROR: -SINGLE and -FLASH can only load at address 0\n");
@@ -862,7 +786,7 @@ int loadfile(char *fname, int address)
     txval(flag_bits());
     txval(0); // reserved
     txval(0); // also reserved
-    tx((uint8_t *)"~", 1);
+    tx((uint8_t *)"~", 1); // end of download
     
     {
         int retry;
@@ -899,6 +823,13 @@ int loadfile(char *fname, int address)
         }
     }
 
+
+    if (load_to_flash && !himem_bin) {
+        // default to flash as himem
+        himem_bin = (uint8_t *)himem_flash_bin;
+        himem_size = himem_flash_bin_len;
+        himem_is_flash = true;
+    }
     // if a himem helper is present, download it to $FC000 and run it
     if (himem_bin) {
         int size = downloadData(himem_bin, 0xFC000, himem_size);
@@ -922,14 +853,6 @@ int loadfile(char *fname, int address)
             next_fname++;
             send_size = 1;
         } else if (address == 0 && (send_size = loadElfSections(next_fname)) >= 0) {
-            // ELF files loaded at 0 get loaded differently,
-            // we can map the sections directly into HUB RAM
-            // or even copy some parts to external memory
-            if (mem_argv_bytes || *fname) {
-                tx_raw_byte('+');
-            } else {
-                tx_raw_byte('-');
-            }
             if (verbose) printf("Loaded %d bytes from ELF file %s\n", send_size, next_fname);
             continue;
         } else {
@@ -968,31 +891,52 @@ int loadfile(char *fname, int address)
             printf("Error downloading %s\n", next_fname);
             promptexit(1);
         }
-        if (mem_argv_bytes || *fname) {
-            // more files to send
-            tx_raw_byte('+');
-        } else {
-            tx_raw_byte('-');
-        }
         wait_drain();
     } while (*fname);
 
-    if (mem_argv_bytes) {
-        /* send ARGv info to $FC000 */
-        if (verbose) printf("sending %d arg bytes\n", mem_argv_bytes);
-        tx_raw_long(ARGV_ADDR);
-        tx_raw_long(mem_argv_bytes);
-        chksum = 0;
-        for (int i = 0; i < mem_argv_bytes; i++) {
-            chksum += mem_argv_data[i];
+    if (load_to_flash) {
+        uint8_t *bootloader;
+        uint32_t *ptr32;
+
+        /* fix up the flash bootloader ("stub") so that it knows how
+           much to load and its checksum */
+        bootloader = calloc(1, 1024);
+        if (flash_stub_bin_len > 1024) {
+            printf("Internal error, flash stub is too big to fit\n");
+            return -1;
         }
-        tx((uint8_t *)mem_argv_data, mem_argv_bytes);
-        verify_chksum(chksum);
-        mem_argv_bytes = 0;
-        tx_raw_byte('-'); // all done
+        memcpy(bootloader, flash_stub_bin, flash_stub_bin_len);
+
+        g_highest_hub_addr = (g_highest_hub_addr + 3) & ~3;
+        ptr32 = (uint32_t *)bootloader;
+        ptr32[2] = g_highest_hub_addr;
+
+        /* now calculate the checksum of the bootloader itself */
+        uint32_t boot_sum = 0;
+        for (int n = 0; n < 1024/4; n++) {
+            boot_sum += ptr32[n];
+        }
+        /* adjust so it will become the magic value "Prop" */
+        ptr32[1] = BOOT_MAGIC - boot_sum;
+        if (verbose) {
+            printf("highest hub address: 0x%x chksum: 0x%x\n", ptr32[2], ptr32[1]);
+        }
+        /* load boot stub to start of flash memory  */
+        downloadData(bootloader, 0x80000000, 1024);
         wait_drain();
+        if (verbose) printf("sending F to device\n");
+        tx_raw_byte('F'); /* says to flash HUB and then start */
+        tx_raw_long(g_highest_hub_addr);
+    } else {
+        if (mem_argv_bytes) {
+            /* send ARGv info to $FC000 */
+            if (verbose) printf("sending %d arg bytes\n", mem_argv_bytes);
+            downloadData((uint8_t *)mem_argv_data, ARGV_ADDR, mem_argv_bytes);
+        }
+        tx_raw_byte('-'); /* finished with programming */
     }
 
+    wait_drain();
     msleep(100);
     return 0;
 }

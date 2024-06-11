@@ -74,6 +74,35 @@ setup
 		mov	chksum, #0
 		call	#send_chksum
 
+next_request
+		'' get request from host
+		'' the requests we're aware of:
+		''   = address size : download "size" bytes to address
+		''   F address size : copy "size" bytes from hub to flash
+		''   !              : execute the last download blob, then wait for more
+		''   -              : terminate downloads then execute
+		''
+		call	#ser_rx
+		cmp	rxbyte, #"=" wz
+	if_z	jmp	#read_file
+		cmp	rxbyte, #"!" wz
+	if_z	jmp	#call_last
+		cmp	rxbyte, #"F" wz
+	if_z	jmp	#copy_hub_to_flash
+		cmp	rxbyte, #"-" wz
+	if_z	jmp	#done_and_exec
+
+		'' bad request
+		'' set an LED high and loop
+		drvh	#56
+		drvl	#57
+error
+		waitx	##10_000_000
+		drvnot	#56
+		drvnot	#57
+		jmp	#error
+
+
 read_file
 		mov	chksum, #0
 		'' read file address
@@ -113,24 +142,16 @@ done_file
 		'' respond to host
 		call	#send_chksum
 
-#ifdef DEBUG
-		drvh	#dbg_pin
-#endif		
-		'' check host response
-		call	#ser_rx
-		'' if they send "!" then execute the code we just downloaded
-		cmp	rxbyte, #"!" wz
-	if_nz	jmp	#.noexec
+		jmp	#next_request
+		
+call_last
 		call	startaddr
 		'' response is in ptra (a mailbox)
 		mov	mailbox, ptra
 		neg	startaddr, #1
-		jmp	#read_file
-.noexec
-		'' if they send "+" then look for another file
-		cmp	rxbyte, #"+" wz
-	if_z	jmp	#read_file
-		
+		jmp	#next_request
+
+done_and_exec
 		waitx	##80_000_000/10		' short pause to ensure sync
 
 		'' shut down auxiliary cog
@@ -163,6 +184,37 @@ start_cog
 		waitx	 ##25_000_000/10
 		coginit	#0,startaddr		'launch cog 0 from starting address
 		'' never returns
+
+		'' send mailbox info to the other COG
+send_mbox
+		'' make sure himem cog is free
+.wait_himem
+		rdlong	resp, mailbox wcz
+	if_c	jmp	#.wait_himem		' negative -> still executing command
+	if_nz	jmp	#himem_error		' positive -> error message
+
+		'' write out the mailbox info (4 longs)
+		setq	#3
+		wrlong	mailinfo, mailbox
+		ret
+		
+		''
+		'' routine to copy HUB memory to flash
+		'' the host will send us how much to copy (a 32 bit value)
+		''
+copy_hub_to_flash
+		call	#ser_rx_long		' get the length
+
+		'' set up mailbox data
+		mov	mailinfo+0, #1		' starting hub address (special alias for 0)
+		mov	mailinfo+1, ##$8000_0400	' starting flash address
+		mov	mailinfo+2, rxlong	' length sent to us by the host
+
+		'' send it to the mailbox
+		call	#send_mbox
+
+		'' and now go
+		jmp	#done_and_exec
 
 		''
 		'' routine to load code into high memory
@@ -200,16 +252,8 @@ next_buffer
 		djnz	pb, #.buf_lp
 
 		'' chunk received
-		'' make sure himem cog is free
-.wait_himem
-		rdlong	resp, mailbox wcz
-	if_c	jmp	#.wait_himem		' negative -> still executing command
-	if_nz	jmp	#himem_error		' positive -> error message
-
-		'' write out the mailbox info (4 longs)
-		setq	#3
-		wrlong	mailinfo, mailbox
-
+		'' send the next mailbox command to the himem cog
+		call	#send_mbox
 		'' now move on to the next chunk
 		add	loadaddr, bufsiz
 		sub	filesize, bufsiz wcz
