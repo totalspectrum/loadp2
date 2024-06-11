@@ -426,6 +426,7 @@ downloadData(uint8_t *data, uint32_t address, uint32_t size)
                 if (mode == 'e') {
                     // read the error message
                     uint8_t errmsg[256];
+                    memset(errmsg, 0, sizeof(errmsg));
                     int r = rx_timeout(errmsg, 255, 2000);
                     if (r < 0) r = 0;
                     errmsg[r] = 0;
