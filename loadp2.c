@@ -924,7 +924,7 @@ int loadfile(char *fname, int address)
         /* load boot stub to start of flash memory  */
         downloadData(bootloader, 0x80000000, 1024);
         wait_drain();
-        if (verbose) printf("sending F to device\n");
+        if (verbose) printf("sending F 0x%08x to device\n", g_highest_hub_addr);
         tx_raw_byte('F'); /* says to flash HUB and then start */
         tx_raw_long(g_highest_hub_addr);
     } else {
