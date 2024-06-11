@@ -65,7 +65,7 @@ $(BUILD)/loadp2$(EXT): $(BUILD) loadp2.c loadelf.c loadelf.h osint_linux.c osint
 	$(CC) -Wall -Og -g $(DEFS) -o $@ loadp2.c loadelf.c $(OSFILE) $(U9FS)
 
 clean:
-	rm -rf $(BUILD) *.o $(HEADERS) *.pasm *.bin
+	rm -rf $(BUILD) *.o $(HEADERS) *.zip *.pasm *.bin loadp2.linux loadp2.exe loadp2.mac
 
 $(BUILD):
 	mkdir -p $(BUILD)
