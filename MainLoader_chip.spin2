@@ -155,9 +155,11 @@ done_and_exec
 		waitx	##80_000_000/10		' short pause to ensure sync
 
 		'' shut down auxiliary cog
-		cmp	mailbox, #0 wz
-	if_nz	wrlong	##-1, mailbox		' send shutdown request
+		tjz	mailbox, #.no_mbox
+		neg	mailinfo+0, #1		' send all 1's for shutdown	
+		call	#send_mbox
 
+.no_mbox
 		'' shut down smart pins
 		dirl	#tx_pin
 		dirl	#rx_pin
@@ -206,9 +208,9 @@ copy_hub_to_flash
 		call	#ser_rx_long		' get the length
 
 		'' set up mailbox data
-		mov	mailinfo+0, #1		' starting hub address (special alias for 0)
+		mov	mailinfo+0, ##R_WRITEBURST	' starting hub address
 		mov	mailinfo+1, ##$8000_0400	' starting flash address
-		mov	mailinfo+2, rxlong	' length sent to us by the host
+		mov	mailinfo+2, rxlong		' length sent to us by the host
 
 		'' send it to the mailbox
 		call	#send_mbox
