@@ -41,7 +41,7 @@
 
 /* default FIFO size of FT231X in P2-EVAL board and PropPlugs */
 //#define DEFAULT_FIFO_SIZE   512
-#define DEFAULT_FIFO_SIZE   1024 /* seems to work better */
+#define DEFAULT_FIFO_SIZE   2048 /* seems to work better */
 
 #define NO_ENTER    0
 #define ENTER_TAQOZ 1
