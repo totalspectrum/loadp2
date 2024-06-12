@@ -388,12 +388,12 @@ downloadData(uint8_t *data, uint32_t address, uint32_t size)
     // send header to device
     mode = sendAddressSize(address, size);
     if (mode == 'h') {
-        printf("No himem kernel loaded, but address requires it\n");
-        return -1;
+        printf("No himem kernel loaded, but address requires it; did you forget -HIMEM=flash\n");
+        promptexit(1);
     }
     if (mode != 's' && mode != 'k') {
         printf("Device reported unknown mode '%c'\n", mode);
-        return -1;
+        promptexit(1);
     }
     if (verbose && mode == 'k') {
         printf("Sending blocks: "); fflush(stdout);
