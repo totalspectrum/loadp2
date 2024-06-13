@@ -10,6 +10,7 @@
 # "i586-mingw32msvc-gcc" for mingw, whereas Debian uses
 # "i686-w64-mingw32-gcc"
 #
+
 ifeq ($(CROSS),win32)
 #  CC=i586-mingw32msvc-gcc
   CC=i686-w64-mingw32-gcc
@@ -54,6 +55,10 @@ P2ASM=flexspin -2
 # docs
 DOCS=README.md LICENSE
 
+# signing programs
+SIGNPC ?= ./sign.dummy.sh
+SIGNMAC ?= /bin/echo
+
 # default build target
 default: $(BUILD)/loadp2$(EXT) $(BOARDS)
 
@@ -87,9 +92,11 @@ loadp2.linux:
 	cp build-linux32/loadp2 ./loadp2.linux
 loadp2.exe:
 	make CROSS=win32
-	cp build-win32/loadp2.exe ./loadp2.exe
+	$(SIGNPC) build-win32/loadp2
+	cp build-win32/loadp2.signed.exe ./loadp2.exe
 loadp2.mac:
 	make CROSS=macosx
+	$(SIGNMAC) build-macosx/loadp2
 	cp build-macosx/loadp2 ./loadp2.mac
 
 zip: loadp2.exe loadp2.linux loadp2.mac
