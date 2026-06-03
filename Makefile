@@ -32,6 +32,11 @@ else ifeq ($(CROSS),macosx)
   EXT=
   BUILD=./build-macosx
   OSFILE=osint_linux.c
+else ifeq ($(CROSS),linux-musl)
+  CC=musl-gcc -static -fno-pie
+  EXT=
+  BUILD=build
+  OSFILE=osint_linux.c
 else
   CC=gcc
   EXT=

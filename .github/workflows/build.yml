@@ -1,0 +1,33 @@
+name: LoadP2 CI
+
+on:
+  push:
+    branches:
+      - "*"
+  pull_request:
+    branches:
+      - "*"
+  workflow_call:
+
+jobs:
+  build_linux_amd64:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Install musl-gcc
+        run: "sudo apt-get install musl-tools"
+      - name: Clone loadp2
+        uses: actions/checkout@v4
+      - name: Clone spin2cpp
+        uses: actions/checkout@v4
+        with:
+          repository: totalspectrum/spin2cpp
+          path: spin2cpp
+      - name: Compile spin2cpp
+        run: make -j "OPT=-O2 -march=native"
+        working-directory: spin2cpp
+      - run: echo "${{ github.workspace }}/spin2cpp/build" >> "$GITHUB_PATH"
+      - run: make CROSS=linux-musl
+      - uses: actions/upload-artifact@v4
+        with:
+          name: loadp2_linux_amd64
+          path: "./build/loadp2"
