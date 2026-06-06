@@ -34,6 +34,7 @@ usage: loadp2
          [ -NOZERO ]               do not clear memory before download (default)
          [ -SINGLE ]               set load mode for single stage
 	 [ -FLASH ]		   load program into SPI flash
+	 [ -FLASHRAW ]		   load prebuilt bootable image into SPI flash
 	 [ -HIMEM=flash ]	   load code sections above $8000_0000 into flash
 	 [ -e script ]             execute script after loading
 	 [ -a ] or [ --args ]      remaining arguments are passed to loaded program at $FC000
@@ -62,6 +63,15 @@ offset `0x10000` (64K) before executing `vgacode.bin`. Note that simply
 writing a program to offset `0` in flash may not make it bootable, as the
 boot ROM has specific requirements to boot from flash. Use the `-FLASH` flag
 instead to create a bootable flash program.
+
+If the image is already a complete bootable flash image, use `-FLASHRAW` to
+write it directly to offset `0` in SPI flash without adding loadp2's boot stub.
+This is useful for large or custom images that already contain a valid first
+1024-byte P2 flash boot block. For example:
+
+```
+loadp2 -p /dev/cu.usbserial-XXX -b 230400 -FLASHRAW custom_flash_image.binary
+```
 
 ## Scripts
 

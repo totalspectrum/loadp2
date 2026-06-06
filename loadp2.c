@@ -66,6 +66,7 @@ static char *send_script = NULL;
 static int mem_argv_bytes = 0;
 static char *mem_argv_data = NULL;
 static bool load_to_flash = false;
+static bool raw_flash_image = false;
 
 int long_timeout_ms = 500;
 int short_timeout_ms = 5;
@@ -170,6 +171,7 @@ usage: loadp2\n\
          [ -PATCH ]                patch in clock frequency and serial parms\n\
          [ -SINGLE ]               set load mode for single stage\n\
          [ -FLASH ]                program application to SPI flash\n\
+         [ -FLASHRAW ]             program prebuilt bootable image to SPI flash\n\
          [ -NOEOF ]                ignore EOF on input\n\
          [ -HIMEM=flash ]          addresses 0x8000000 and up refer to flash\n\
          filespec                  file to load\n\
@@ -1255,6 +1257,8 @@ int main(int argc, char **argv)
             else if (!strcmp(argv[i], "-SPI") || !strcmp(argv[i], "-FLASH") ) {
                 load_to_flash = true;
                 use_checksum = 0; /* checksum calculation throws off flash loader */
+            } else if (!strcmp(argv[i], "-FLASHRAW")) {
+                raw_flash_image = true;
             } else if (!strncmp(argv[i], "-HIMEM=", 7)) {
                 char *himem_kind = argv[i] + 7;
                 if (!strcmp(himem_kind, "flash")) {
@@ -1324,6 +1328,39 @@ int main(int argc, char **argv)
             printf("Entering ROM is incompatible with downloading a file\n");
             Usage(NULL);
         }
+    }
+    if (raw_flash_image) {
+        char *raw_fname;
+        size_t len;
+
+        if (!fname) {
+            Usage("-FLASHRAW requires a file name");
+        }
+        if (load_to_flash) {
+            Usage("-FLASHRAW cannot be combined with -FLASH");
+        }
+        if (mem_argv_bytes != 0) {
+            Usage("-FLASHRAW is incompatible with ARGv");
+        }
+        if (address != 0) {
+            Usage("-FLASHRAW always writes to SPI flash offset 0");
+        }
+        if (fname[0] == '@' || strchr(fname, ',')) {
+            Usage("-FLASHRAW accepts one plain binary image file");
+        }
+
+        himem_bin = (uint8_t *)himem_flash_bin;
+        himem_size = himem_flash_bin_len;
+        himem_is_flash = true;
+
+        len = strlen(fname) + strlen("@80000000=") + 1;
+        raw_fname = malloc(len);
+        if (!raw_fname) {
+            printf("Out of memory preparing -FLASHRAW file name\n");
+            promptexit(1);
+        }
+        snprintf(raw_fname, len, "@80000000=%s", fname);
+        fname = raw_fname;
     }
     if (!fname && !runterm && !enter_rom) {
         Usage("Must specify a file name or -t or -x");
