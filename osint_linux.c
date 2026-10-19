@@ -309,6 +309,35 @@ int rx(uint8_t* buff, int n)
 }
 
 /**
+ * write all of a buffer
+ * A signal arriving while a write to a serial port or a terminal blocks cuts
+ * the write short, or fails it with EINTR when nothing was written yet. A
+ * loader running inside a Go program receives such signals all the time: the
+ * Go runtime preempts its threads with them. Both cases are written again.
+ * @param fd - file descriptor to write to
+ * @param buff - char pointer to buffer
+ * @param n - number of bytes in buffer to send
+ * @returns n, or -1 on failure
+ */
+static ssize_t write_all(int fd, const void* buff, size_t n)
+{
+    const char* p = buff;
+    size_t left = n;
+    ssize_t bytes;
+
+    while (left > 0) {
+        bytes = write(fd, p, left);
+        if (bytes < 0 && errno == EINTR)
+            continue;
+        if (bytes <= 0)
+            return -1;
+        p += bytes;
+        left -= bytes;
+    }
+    return (ssize_t)n;
+}
+
+/**
  * transmit a buffer
  * @param buff - char pointer to buffer
  * @param n - number of bytes in buffer to send
@@ -316,7 +345,6 @@ int rx(uint8_t* buff, int n)
  */
 int tx(uint8_t* buff, int n)
 {
-    ssize_t bytes;
 #if 0
     int j = 0;
     while(j < n) {
@@ -324,16 +352,28 @@ int tx(uint8_t* buff, int n)
     }
     printf("tx %d byte(s)\n",n);
 #endif
-    bytes = write(hSerial, buff, n);
-    if(bytes != n) {
+    if(write_all(hSerial, buff, n) != n) {
         printf("Error writing port\n");
         return 0;
     }
-    return (int)bytes;
+    return n;
+}
+
+/**
+ * the time in milliseconds, for a deadline
+ */
+static unsigned long long now_ms(void)
+{
+    struct timeval t;
+
+    gettimeofday(&t, NULL);
+    return 1000 * (unsigned long long)t.tv_sec + ((unsigned long long)t.tv_usec/1000);
 }
 
 /**
  * receive a buffer with a timeout
+ * A signal ends select early with EINTR whatever its handler's flags, and the
+ * wait goes on for what is left of the timeout (see write_all).
  * @param buff - char pointer to buffer
  * @param n - number of bytes in buffer to read
  * @param timeout - timeout in milliseconds
@@ -344,16 +384,28 @@ int rx_timeout(uint8_t* buff, int n, int timeout)
     ssize_t bytes = 0;
     struct timeval toval;
     fd_set set;
+    unsigned long long deadline = now_ms() + timeout;
+    unsigned long long now;
+    int r;
 
-    FD_ZERO(&set);
-    FD_SET(hSerial, &set);
+    for (;;) {
+        FD_ZERO(&set);
+        FD_SET(hSerial, &set);
 
-    toval.tv_sec = timeout / 1000;
-    toval.tv_usec = (timeout % 1000) * 1000;
+        toval.tv_sec = timeout / 1000;
+        toval.tv_usec = (timeout % 1000) * 1000;
 
-    if (select(hSerial + 1, &set, NULL, NULL, &toval) > 0) {
-        if (FD_ISSET(hSerial, &set))
+        r = select(hSerial + 1, &set, NULL, NULL, &toval);
+        if (r >= 0 || errno != EINTR)
+            break;
+        now = now_ms();
+        timeout = now < deadline ? (int)(deadline - now) : 0;
+    }
+
+    if (r > 0 && FD_ISSET(hSerial, &set)) {
+        do {
             bytes = read(hSerial, buff, n);
+        } while (bytes < 0 && errno == EINTR);
     }
 
     return (int)(bytes > 0 ? bytes : SERIAL_TIMEOUT);
@@ -473,7 +525,7 @@ void terminal_mode(int runterm_mode, int pst_mode)
                       }
                     }
                     if (realbytes > 0) {
-                        write(fileno(stdout), realbuf, realbytes);
+                        write_all(fileno(stdout), realbuf, realbytes);
                     }
                 }
             }
@@ -493,7 +545,7 @@ void terminal_mode(int runterm_mode, int pst_mode)
                             goto done;
                         }
                     }
-                    write(hSerial, buf, cnt);
+                    write_all(hSerial, buf, cnt);
                 }
             }
         }
